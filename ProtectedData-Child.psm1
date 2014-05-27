@@ -213,6 +213,9 @@ function Unprotect-Data
        Thumbprint of an RSA certificate that will be used to decrypt the data.  This certificate must be present in either the local computer or current user's certificate stores, and the current user must have permission to use the certificate's private key.  One of the InputObject's KeyData objects must be protected with this certificate.
     .PARAMETER Password
        A SecureString containing a password that will be used to derive an encryption key.  One of the InputObject's KeyData objects must be protected with this password.
+    .PARAMETER SkipCertificateValidation
+       If specified, the command does not attempt to validate that the specified certificate(s) came from trusted publishers and have not been revoked or expired.
+       This is primarily intended to allow the use of self-signed certificates.
     .EXAMPLE
        $decryptedObject = Unprotect-Data -InputObject $encryptedObject -CertificateThumbprint CB04E7C885BEAE441B39BC843C85855D97785D25
 
@@ -241,6 +244,12 @@ function Unprotect-Data
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
         [ValidateScript({
+            if ($_ -isnot [PowerShellUtils.Cryptography.ProtectedData] -and
+                $_.PSObject.TypeNames -notcontains 'Deserialized.PowerShellUtils.Cryptography.ProtectedData')
+            {
+                throw 'InputObject argument must be a ProtectedData object.'
+            }
+
             if ($null -eq $_.CipherText -or $_.CipherText.Count -eq 0)
             {
                 throw 'Protected data object contained no cipher text.'
@@ -254,8 +263,7 @@ function Unprotect-Data
             }
             
             return $true
-        })]
-        [PowerShellUtils.Cryptography.ProtectedData]
+        })]        
         $InputObject,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
@@ -272,7 +280,10 @@ function Unprotect-Data
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Password')]
         [System.Security.SecureString]
-        $Password
+        $Password,
+
+        [switch]
+        $SkipCertificateVerification
     )
 
     begin
@@ -283,7 +294,13 @@ function Unprotect-Data
         {
             try
             {
-                $cert = Get-KeyEncryptionCertificate -CertificateThumbprint $CertificateThumbprint -RequirePrivateKey -ErrorAction Stop |
+                $params = @{
+                    CertificateThumbprint = $CertificateThumbprint
+                    RequirePrivateKey = $true
+                    SkipCertificateVerification = $SkipCertificateVerification
+                }
+
+                $cert = Get-KeyEncryptionCertificate @params -ErrorAction Stop |
                         Select-Object -First 1
             }
             catch
@@ -400,7 +417,15 @@ function Add-ProtectedDataCredential
     [CmdletBinding(DefaultParameterSetName = 'Certificate')]
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
-        [PowerShellUtils.Cryptography.ProtectedData]
+        [ValidateScript({
+            if ($_ -isnot [PowerShellUtils.Cryptography.ProtectedData] -and
+                $_.PSObject.TypeNames -notcontains 'Deserialized.PowerShellUtils.Cryptography.ProtectedData')
+            {
+                throw 'InputObject argument must be a ProtectedData object.'
+            }
+
+            return $true
+        })]
         $InputObject,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
@@ -568,7 +593,15 @@ function Remove-ProtectedDataCredential
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
-        [PowerShellUtils.Cryptography.ProtectedData]
+        [ValidateScript({
+            if ($_ -isnot [PowerShellUtils.Cryptography.ProtectedData] -and
+                $_.PSObject.TypeNames -notcontains 'Deserialized.PowerShellUtils.Cryptography.ProtectedData')
+            {
+                throw 'InputObject argument must be a ProtectedData object.'
+            }
+
+            return $true
+        })]
         $InputObject,
 
         [ValidateNotNull()]
@@ -598,11 +631,11 @@ function Remove-ProtectedDataCredential
         $matchingKeyData = @(
             foreach ($keyData in $InputObject.KeyData)
             {
-                if ($keyData -is [PowerShellUtils.Cryptography.CertificateProtectedKeyData])
+                if ($keyData.PSObject.TypeNames -match 'PowerShellUtils\.Cryptography\.CertificateProtectedKeyData$')
                 {
                     if ($CertificateThumbprint -contains $keyData.Thumbprint) { $keyData }
                 }
-                elseif ($keyData -is [PowerShellUtils.Cryptography.PasswordProtectedKeyData])
+                elseif ($keyData.PSObject.TypeNames -match 'PowerShellUtils\.Cryptography\.PasswordProtectedKeyData$')
                 {
                     foreach ($secureString in $Password)
                     {
@@ -748,7 +781,15 @@ function Add-KeyData
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        [PowerShellUtils.Cryptography.ProtectedData]
+        [ValidateScript({
+            if ($_ -isnot [PowerShellUtils.Cryptography.ProtectedData] -and
+                $_.PSObject.TypeNames -notcontains 'Deserialized.PowerShellUtils.Cryptography.ProtectedData')
+            {
+                throw 'InputObject argument must be a ProtectedData object.'
+            }
+
+            return $true
+        })]
         $InputObject,
 
         [Parameter(Mandatory = $true)]
@@ -806,7 +847,7 @@ function Add-KeyData
         {
             $match = $InputObject.KeyData |
                      Where-Object {
-                         $_ -is [PowerShellUtils.Cryptography.PasswordProtectedKeyData] -and
+                         $_.PSObject.TypeNames -match 'PowerShellUtils\.Cryptography\.PasswordProtectedKeyData$' -and
                          $_.Hash -eq (Get-PasswordHash -Password $secureString -Salt $_.HashSalt -IterationCount $_.IterationCount)
                      }
             
@@ -822,7 +863,15 @@ function Unprotect-MatchingKeyData
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        [PowerShellUtils.Cryptography.ProtectedData]
+        [ValidateScript({
+            if ($_ -isnot [PowerShellUtils.Cryptography.ProtectedData] -and
+                $_.PSObject.TypeNames -notcontains 'Deserialized.PowerShellUtils.Cryptography.ProtectedData')
+            {
+                throw 'InputObject argument must be a ProtectedData object.'
+            }
+
+            return $true
+        })]
         $InputObject,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
@@ -843,7 +892,7 @@ function Unprotect-MatchingKeyData
         {
             $keyData = $InputObject.KeyData |
                         Where-Object {
-                            $_ -is [PowerShellUtils.Cryptography.CertificateProtectedKeyData] -and
+                            $_.PSObject.TypeNames -match 'PowerShellUtils\.Cryptography\.CertificateProtectedKeyData$' -and
                             $_.Thumbprint -eq $Certificate.Thumbprint
                         } |
                         Select-Object -First 1
@@ -867,7 +916,7 @@ function Unprotect-MatchingKeyData
         {
             $keyData = $InputObject.KeyData |
                         Where-Object {
-                            $_ -is [PowerShellUtils.Cryptography.PasswordProtectedKeyData] -and
+                            $_.PSObject.TypeNames -match 'PowerShellUtils\.Cryptography\.PasswordProtectedKeyData$' -and
                             (Get-PasswordHash -Password $Password -Salt $_.HashSalt -IterationCount $_.IterationCount) -eq $_.Hash
                         } |
                         Select-Object -First 1
@@ -1164,7 +1213,15 @@ function Unprotect-KeyDataWithPassword
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        [PowerShellUtils.Cryptography.PasswordProtectedKeyData]
+        [ValidateScript({
+            if ($_ -isnot [PowerShellUtils.Cryptography.PasswordProtectedKeyData] -and
+                $_.PSObject.TypeNames -notcontains 'Deserialized.PowerShellUtils.Cryptography.PasswordProtectedKeyData')
+            {
+                throw 'InputObject argument must be a PasswordProtectedKeyData object.'
+            }
+
+            return $true
+        })]
         $KeyData,
 
         [Parameter(Mandatory = $true)]
