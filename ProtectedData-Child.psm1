@@ -351,7 +351,7 @@ function Unprotect-Data
             # defeats the purpose of pinning it in the first place.  Update ConvertFrom-ByteArray and its helper functions
             # to accept start / end index arguments instead.
             
-            ConvertFrom-ByteArray -ByteArray $plainText[0..($memoryStream.Position - 1)] -Type $InputObject.Type
+            ConvertFrom-ByteArray -ByteArray $plainText -Type $InputObject.Type -StartIndex 4 -ByteCount ($memoryStream.Position - 4)
         }
         catch
         {
@@ -1376,32 +1376,51 @@ function ConvertFrom-ByteArray
             return $true
         })]
         [type]
-        $Type
+        $Type,
+
+        [UInt32]
+        $StartIndex = 0,
+
+        [Nullable[UInt32]]
+        $ByteCount = $null
     )
+
+    if ($null -eq $ByteCount)
+    {
+        $ByteCount = $ByteArray.Count
+    }
+
+    if ($StartIndex + $ByteCount -gt $ByteArray.Count)
+    {
+        throw 'The specified index and count values exceed the bounds of the array.'
+    }
 
     switch ($Type)
     {
         ([string])
         {
-            Convert-ByteArrayToString -ByteArray $ByteArray
+            Convert-ByteArrayToString -ByteArray $ByteArray -StartIndex $StartIndex -ByteCount $ByteCount
             break
         }
 
         ([System.Security.SecureString])
         {
-            Convert-ByteArrayToSecureString -ByteArray $ByteArray
+            Convert-ByteArrayToSecureString -ByteArray $ByteArray -StartIndex $StartIndex -ByteCount $ByteCount
             break
         }
 
         ([System.Management.Automation.PSCredential])
         {
-            Convert-ByteArrayToPSCredential -ByteArray $ByteArray
+            Convert-ByteArrayToPSCredential -ByteArray $ByteArray -StartIndex $StartIndex -ByteCount $ByteCount
             break
         }
 
         ([byte[]])
         {
-            ,$ByteArray.Clone()
+            $array = New-Object byte[]($ByteCount)
+            [Array]::Copy($ByteArray, $StartIndex, $array, 0, $ByteCount)
+            
+            $array
             break
         }
 
@@ -1528,10 +1547,18 @@ function Convert-ByteArrayToString
     param (
         [Parameter(Mandatory = $true)]
         [byte[]]
-        $ByteArray
+        $ByteArray,
+
+        [Parameter(Mandatory = $true)]
+        [UInt32]
+        $StartIndex,
+
+        [Parameter(Mandatory = $true)]
+        [UInt32]
+        $ByteCount
     )
 
-    [System.Text.Encoding]::UTF8.GetString($ByteArray)
+    [System.Text.Encoding]::UTF8.GetString($ByteArray, $StartIndex, $ByteCount)
 }
 
 function Convert-ByteArrayToSecureString
@@ -1540,7 +1567,15 @@ function Convert-ByteArrayToSecureString
     param (
         [Parameter(Mandatory = $true)]
         [byte[]]
-        $ByteArray
+        $ByteArray,
+
+        [Parameter(Mandatory = $true)]
+        [UInt32]
+        $StartIndex,
+
+        [Parameter(Mandatory = $true)]
+        [UInt32]
+        $ByteCount
     )
 
     $chars        = $null
@@ -1550,7 +1585,7 @@ function Convert-ByteArrayToSecureString
     try
     {
         $ss           = New-Object System.Security.SecureString            
-        $memoryStream = New-Object System.IO.MemoryStream(,$ByteArray)
+        $memoryStream = New-Object System.IO.MemoryStream($ByteArray, $StartIndex, $ByteCount)
         $streamReader = New-Object System.IO.StreamReader($memoryStream, [System.Text.Encoding]::Unicode, $false)
         $chars        = New-Object PowerShellUtils.Cryptography.PinnedArray[char](1024)
 
@@ -1580,19 +1615,27 @@ function Convert-ByteArrayToPSCredential
     param (
         [Parameter(Mandatory = $true)]
         [byte[]]
-        $ByteArray
+        $ByteArray,
+
+        [Parameter(Mandatory = $true)]
+        [UInt32]
+        $StartIndex,
+
+        [Parameter(Mandatory = $true)]
+        [UInt32]
+        $ByteCount
     )
 
     $message = 'Byte array is not a serialized PSCredential object.'
 
-    if ($ByteArray.Count -lt $PSCredentialHeader.Count + 2) { throw $message }
+    if ($ByteCount -lt $PSCredentialHeader.Count + 4) { throw $message }
 
     for ($i = 0; $i -lt $PSCredentialHeader.Count; $i++)
     {
-        if ($ByteArray[$i] -ne $PSCredentialHeader[$i]) { throw $message }
+        if ($ByteArray[$StartIndex + $i] -ne $PSCredentialHeader[$i]) { throw $message }
     }
 
-    $i = $PSCredentialHeader.Count
+    $i = $StartIndex + $PSCredentialHeader.Count
 
     $sizeBytes = $ByteArray[$i..($i+3)]
     if (-not [System.BitConverter]::IsLittleEndian) { [array]::Reverse($sizeBytes) }
@@ -1600,14 +1643,14 @@ function Convert-ByteArrayToPSCredential
     $i += 4
     $size = [System.BitConverter]::ToUInt32($sizeBytes, 0)
 
-    if ($ByteArray.Count -lt $i + $size) { throw $message }
+    if ($ByteCount -lt $i + $size) { throw $message }
 
     $userName = [System.Text.Encoding]::Unicode.GetString($ByteArray, $i, $size)
     $i += $size
 
     try
     {
-        $secureString = Convert-ByteArrayToSecureString -ByteArray $ByteArray[$i..($ByteArray.Count - 1)]
+        $secureString = Convert-ByteArrayToSecureString -ByteArray $ByteArray -StartIndex $i -ByteCount ($StartIndex + $ByteCount - $i)
     }
     catch
     {
