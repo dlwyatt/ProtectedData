@@ -729,7 +729,9 @@ function Get-KeyEncryptionCertificate
     .LINK
        Remove-ProtectedDataCredential
     #>
+
     [CmdletBinding()]
+    [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
     param (
         [ValidateNotNullOrEmpty()]
         [string]
@@ -959,6 +961,7 @@ function Unprotect-MatchingKeyData
 function ValidateKeyEncryptionCertificate
 {
     [CmdletBinding()]
+    [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
         [System.Security.Cryptography.X509Certificates.X509Certificate2]
@@ -1141,6 +1144,7 @@ function Get-RandomBytes
 function Protect-KeyDataWithPassword
 {
     [CmdletBinding()]
+    [OutputType([PowerShellUtils.Cryptography.PasswordProtectedKeyData])]
     param (
         [Parameter(Mandatory = $true)]
         [System.Security.SecureString]
@@ -1416,7 +1420,7 @@ function ConvertFrom-ByteArray
             $array = New-Object byte[]($ByteCount)
             [Array]::Copy($ByteArray, $StartIndex, $array, 0, $ByteCount)
             
-            $array
+            ,$array
             break
         }
 
@@ -1431,6 +1435,7 @@ function ConvertFrom-ByteArray
 function Convert-StringToPinnedByteArray
 {
     [CmdletBinding()]
+    [OutputType([PowerShellUtils.Cryptography.PinnedArray[byte]])]
     param (
         [Parameter(Mandatory = $true)]
         [string]
@@ -1445,6 +1450,7 @@ function Convert-StringToPinnedByteArray
 function Convert-SecureStringToPinnedByteArray
 {
     [CmdletBinding()]
+    [OutputType([PowerShellUtils.Cryptography.PinnedArray[byte]])]
     param (
         [Parameter(Mandatory = $true)]
         [System.Security.SecureString]
@@ -1478,6 +1484,7 @@ function Convert-SecureStringToPinnedByteArray
 function Convert-PSCredentialToPinnedByteArray
 {
     [CmdletBinding()]
+    [OutputType([PowerShellUtils.Cryptography.PinnedArray[byte]])]
     param (
         [Parameter(Mandatory = $true)]
         [System.Management.Automation.PSCredential]
@@ -1540,6 +1547,7 @@ function Convert-PSCredentialToPinnedByteArray
 function Convert-ByteArrayToString
 {
     [CmdletBinding()]
+    [OutputType([string])]
     param (
         [Parameter(Mandatory = $true)]
         [byte[]]
@@ -1560,6 +1568,7 @@ function Convert-ByteArrayToString
 function Convert-ByteArrayToSecureString
 {
     [CmdletBinding()]
+    [OutputType([System.Security.SecureString])]
     param (
         [Parameter(Mandatory = $true)]
         [byte[]]
@@ -1608,6 +1617,7 @@ function Convert-ByteArrayToSecureString
 function Convert-ByteArrayToPSCredential
 {
     [CmdletBinding()]
+    [OutputType([System.Management.Automation.PSCredential])]
     param (
         [Parameter(Mandatory = $true)]
         [byte[]]
