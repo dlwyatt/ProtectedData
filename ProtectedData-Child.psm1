@@ -347,10 +347,6 @@ function Unprotect-Data
             $cryptoStream.Write($InputObject.CipherText, 0, $InputObject.CipherText.Count)
             $cryptoStream.FlushFinalBlock()
 
-            # TODO: Slicing the plaintext array like this is probably copying it to a new array object in memory, which
-            # defeats the purpose of pinning it in the first place.  Update ConvertFrom-ByteArray and its helper functions
-            # to accept start / end index arguments instead.
-            
             ConvertFrom-ByteArray -ByteArray $plainText -Type $InputObject.Type -StartIndex 4 -ByteCount ($memoryStream.Position - 4)
         }
         catch
