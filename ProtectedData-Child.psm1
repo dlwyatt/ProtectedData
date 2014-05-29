@@ -1025,15 +1025,17 @@ function ValidateKeyEncryptionCertificate
         
         if ($RequirePrivateKey)
         {
-            $Certificate = Get-ChildItem -Path 'Cert:\' -Recurse -Include $Certificate.Thumbprint -ErrorAction $IgnoreError |
+            $privateCert = Get-ChildItem -Path 'Cert:\' -Recurse -Include $Certificate.Thumbprint -ErrorAction $IgnoreError |
                            Where-Object { $_.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider] } |
                            Select-Object -First 1
         
-            if ($null -eq $Certificate)
+            if ($null -eq $privateCert)
             {
                 Write-Error "Could not find private key for certificate '$($Certificate.Thumbprint)'."
                 return
             }
+
+            $Certificate = $privateCert
         }
     
         $Certificate
