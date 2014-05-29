@@ -1383,7 +1383,7 @@ function ConvertFrom-ByteArray
 
     if ($null -eq $ByteCount)
     {
-        $ByteCount = $ByteArray.Count
+        $ByteCount = $ByteArray.Count - $StartIndex
     }
 
     if ($StartIndex + $ByteCount -gt $ByteArray.Count)
