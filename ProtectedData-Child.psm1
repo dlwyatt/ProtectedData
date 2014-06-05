@@ -244,8 +244,7 @@ function Unprotect-Data
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
         [ValidateScript({
-            if ($_ -isnot [PowerShellUtils.Cryptography.ProtectedData] -and
-                $null -eq (ConvertTo-ProtectedData -InputObject $_))
+            if ($null -eq (ConvertTo-ProtectedData -InputObject $_))
             {
                 throw 'InputObject argument must be a ProtectedData object.'
             }
@@ -420,8 +419,7 @@ function Add-ProtectedDataCredential
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
         [ValidateScript({
-            if ($_ -isnot [PowerShellUtils.Cryptography.ProtectedData] -and
-                $null -eq (ConvertTo-ProtectedData -InputObject $_))
+            if ($null -eq (ConvertTo-ProtectedData -InputObject $_))
             {
                 throw 'InputObject argument must be a ProtectedData object.'
             }
