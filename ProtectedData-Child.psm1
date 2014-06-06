@@ -53,13 +53,13 @@ function Protect-Data
 
        Object must be one of the types returned by the Get-ProtectedDataSupportedTypes command.
     .OUTPUTS
-       [PowerShellUtils.Cryptography.ProtectedData]
+       PSObject
 
-       The ProtectedData type contains the following properties:
+       The output object contains the following properties:
 
        CipherText : An array of bytes containing the encrypted data
        Type       : A string representation of the InputObject's original type (used when decrypting back to the original object later.)
-       KeyData    : One or more KeyData structures which contain encrypted copies of the AES key used to protect the ciphertext, and other identifying information about the way this copy of the keys was protected, such as Certificate Thumbprint, Password Hash, Salt values, and Iteration count.
+       KeyData    : One or more structures which contain encrypted copies of the AES key used to protect the ciphertext, and other identifying information about the way this copy of the keys was protected, such as Certificate Thumbprint, Password Hash, Salt values, and Iteration count.
     .LINK
         Unprotect-Data
     .LINK
@@ -71,7 +71,7 @@ function Protect-Data
     #>
 
     [CmdletBinding()]
-    [OutputType([PowerShellUtils.Cryptography.ProtectedData])]
+    [OutputType([psobject])]
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
         [ValidateScript({
@@ -150,8 +150,8 @@ function Protect-Data
             $plainText = ConvertTo-PinnedByteArray -InputObject $InputObject
 
             $aes = New-Object System.Security.Cryptography.AesCryptoServiceProvider
-            $key = New-Object PowerShellUtils.Cryptography.PinnedArray[byte](,$aes.Key)
-            $iv  = New-Object PowerShellUtils.Cryptography.PinnedArray[byte](,$aes.IV)
+            $key = New-Object PowerShellUtils.PinnedArray[byte](,$aes.Key)
+            $iv  = New-Object PowerShellUtils.PinnedArray[byte](,$aes.IV)
 
             $memoryStream = New-Object System.IO.MemoryStream
             $cryptoStream = New-Object System.Security.Cryptography.CryptoStream($memoryStream, $aes.CreateEncryptor(), 'Write')
@@ -159,7 +159,7 @@ function Protect-Data
             $cryptoStream.Write($plainText, 0, $plainText.Count)
             $cryptoStream.FlushFinalBlock()
 
-            $protectedData = New-Object PowerShellUtils.Cryptography.ProtectedData -Property @{
+            $protectedData = New-Object psobject -Property @{
                 CipherText = $memoryStream.ToArray()
                 Type       = $InputObject.GetType().FullName
                 KeyData    = @()
@@ -225,7 +225,9 @@ function Unprotect-Data
 
        Decrypts the contents of $encryptedObject and outputs an object of the same type as what was originally passed to Protect-Data.  Uses a password to decrypt the object instead of a certificate.
     .INPUTS
-       [PowerShellUtils.Cryptography.ProtectedData]
+       PSObject
+
+       The input object should be a copy of an object that was produced by Protect-Data.
     .OUTPUTS
        Object
 
@@ -244,7 +246,7 @@ function Unprotect-Data
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
         [ValidateScript({
-            if ($null -eq (ConvertTo-ProtectedData -InputObject $_))
+            if (-not (Test-IsProtectedData -InputObject $_))
             {
                 throw 'InputObject argument must be a ProtectedData object.'
             }
@@ -262,7 +264,7 @@ function Unprotect-Data
             }
             
             return $true
-        })]        
+        })]
         $InputObject,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
@@ -311,8 +313,6 @@ function Unprotect-Data
 
     process
     {
-        $protectedData = ConvertTo-ProtectedData -InputObject $InputObject
-
         $plainText = $null
         $aes       = $null
         $key       = $null
@@ -329,7 +329,7 @@ function Unprotect-Data
         
         try
         {
-            $result = Unprotect-MatchingKeyData -InputObject $protectedData @params
+            $result = Unprotect-MatchingKeyData -InputObject $InputObject @params
             $key    = $result.Key
             $iv     = $result.IV
 
@@ -340,15 +340,15 @@ function Unprotect-Data
 
             # Not sure exactly how long of a buffer we'll need to hold the decrypted data.  Twice
             # the ciphertext length should be more than enough.
-            $plainText    = New-Object PowerShellUtils.Cryptography.PinnedArray[byte](2 * $protectedData.CipherText.Count)
+            $plainText    = New-Object PowerShellUtils.PinnedArray[byte](2 * $InputObject.CipherText.Count)
 
             $memoryStream = New-Object System.IO.MemoryStream(,$plainText)
             $cryptoStream = New-Object System.Security.Cryptography.CryptoStream($memoryStream, $aes.CreateDecryptor(), 'Write')
 
-            $cryptoStream.Write($protectedData.CipherText, 0, $protectedData.CipherText.Count)
+            $cryptoStream.Write($InputObject.CipherText, 0, $InputObject.CipherText.Count)
             $cryptoStream.FlushFinalBlock()
 
-            ConvertFrom-ByteArray -ByteArray $plainText -Type $protectedData.Type -ByteCount $memoryStream.Position
+            ConvertFrom-ByteArray -ByteArray $plainText -Type $InputObject.Type -ByteCount $memoryStream.Position
         }
         catch
         {
@@ -399,12 +399,12 @@ function Add-ProtectedDataCredential
 
        Uses the certificate with thumbprint $oldThumbprint to add new key copies to the $protectedData object.  $newThumbprints would be a string array containing thumbprints, and $newPasswords would be an array of SecureString objects.
     .INPUTS
-       [PowerShellUtils.Cryptography.ProtectedData]
+       [PSObject]
 
-       Object must be one of the types returned by the Get-ProtectedDataSupportedTypes command.
+       The input object should be a copy of an object that was produced by Protect-Data.
     .OUTPUTS
        None, or
-       [PowerShellUtils.Cryptography.ProtectedData]
+       [PSObject]
     .LINK
         Unprotect-Data
     .LINK
@@ -419,7 +419,7 @@ function Add-ProtectedDataCredential
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
         [ValidateScript({
-            if ($null -eq (ConvertTo-ProtectedData -InputObject $_))
+            if (-not (Test-IsProtectedData -InputObject $_))
             {
                 throw 'InputObject argument must be a ProtectedData object.'
             }
@@ -520,8 +520,6 @@ function Add-ProtectedDataCredential
 
     process
     {
-        $protectedData = ConvertTo-ProtectedData -InputObject $InputObject
-
         if ($PSCmdlet.ParameterSetName -eq 'Certificate')
         {
             $params = @{ Certificate = $decryptionCert }
@@ -536,11 +534,11 @@ function Add-ProtectedDataCredential
 
         try
         {
-            $result = Unprotect-MatchingKeyData -InputObject $protectedData @params
+            $result = Unprotect-MatchingKeyData -InputObject $InputObject @params
             $key    = $result.Key
             $iv     = $result.IV
 
-            Add-KeyData -InputObject $protectedData -Key $key -IV $iv -Certificate $certs -Password $NewPassword
+            Add-KeyData -InputObject $InputObject -Key $key -IV $iv -Certificate $certs -Password $NewPassword
         }
         catch
         {
@@ -555,7 +553,7 @@ function Add-ProtectedDataCredential
 
         if ($Passthru)
         {
-            $protectedData
+            $InputObject
         }
     }
 }
@@ -580,10 +578,12 @@ function Remove-ProtectedDataCredential
 
        Removes certificates and passwords from an existing ProtectedData object.
     .INPUTS
-       [PowerShellUtils.Cryptography.ProtectedData]
+       [PSObject]
+
+       The input object should be a copy of an object that was produced by Protect-Data.
     .OUTPUTS
        None, or
-       [PowerShellUtils.Cryptography.ProtectedData]
+       [PSObject]
     .LINK
        Protect-Data
     .LINK
@@ -596,7 +596,7 @@ function Remove-ProtectedDataCredential
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
         [ValidateScript({
-            if ($null -eq (ConvertTo-ProtectedData -InputObject $_))
+            if (-not (Test-IsProtectedData -InputObject $_))
             {
                 throw 'InputObject argument must be a ProtectedData object.'
             }
@@ -629,16 +629,14 @@ function Remove-ProtectedDataCredential
 
     process
     {
-        $protectedData = ConvertTo-ProtectedData -InputObject $InputObject
-
         $matchingKeyData = @(
-            foreach ($keyData in $protectedData.KeyData)
+            foreach ($keyData in $InputObject.KeyData)
             {
-                if ($keyData.PSObject.TypeNames -match 'PowerShellUtils\.Cryptography\.CertificateProtectedKeyData$')
+                if (Test-IsCertificateProtectedKeyData -InputObject $keyData)
                 {
                     if ($CertificateThumbprint -contains $keyData.Thumbprint) { $keyData }
                 }
-                elseif ($keyData.PSObject.TypeNames -match 'PowerShellUtils\.Cryptography\.PasswordProtectedKeyData$')
+                elseif (Test-IsPasswordProtectedKeyData -InputObject $keyData)
                 {
                     foreach ($secureString in $Password)
                     {
@@ -651,17 +649,17 @@ function Remove-ProtectedDataCredential
             }
         )
 
-        if ($matchingKeyData.Count -eq $protectedData.KeyData.Count)
+        if ($matchingKeyData.Count -eq $InputObject.KeyData.Count)
         {
             Write-Error 'You must leave at least one copy of the ProtectedData object''s keys.'
             return
         }
 
-        $protectedData.KeyData = $protectedData.KeyData | Where-Object { $matchingKeyData -notcontains $_ }
+        $InputObject.KeyData = $InputObject.KeyData | Where-Object { $matchingKeyData -notcontains $_ }
 
         if ($Passthru)
         {
-            $protectedData
+            $InputObject
         }
     }
 }
@@ -689,11 +687,7 @@ function Get-ProtectedDataSupportedTypes
     [OutputType([Type[]])]
     param ( )
 
-    # Not sure if the Clone() is strictly necessary here since PowerShell probably enumerates
-    # the collection anyway, rather than returning a reference to the original array, but the
-    # performance difference isn't really going to matter either way.
-
-    $ValidTypes.Clone()
+    $ValidTypes
 }
 
 function Get-KeyEncryptionCertificate
@@ -786,14 +780,6 @@ function Add-KeyData
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        [ValidateScript({
-            if ($null -eq (ConvertTo-ProtectedData -InputObject $_))
-            {
-                throw 'InputObject argument must be a ProtectedData object.'
-            }
-
-            return $true
-        })]
         $InputObject,
 
         [Parameter(Mandatory = $true)]
@@ -819,28 +805,26 @@ function Add-KeyData
         $PasswordIterationCount = 1000
     )
 
-    $protectedData = ConvertTo-ProtectedData -InputObject $InputObject
-
     if ($certs.Count -eq 0 -and $Password.Count -eq 0)
     {
         return
     }
 
-    $protectedData.KeyData += @(
+    $InputObject.KeyData += @(
         foreach ($cert in $Certificate)
         {
-            $match = $protectedData.KeyData |
+            $match = $InputObject.KeyData |
                      Where-Object { $_.Thumbprint -eq $cert.Thumbprint }
             
             if ($null -ne $match) { continue }
 
             try
             {
-                New-Object PowerShellUtils.Cryptography.CertificateProtectedKeyData(
-                    $cert.PublicKey.Key.Encrypt($key, $true),
-                    $cert.PublicKey.Key.Encrypt($iv , $true),
-                    $cert.Thumbprint
-                )
+                New-Object psobject -Property @{
+                    Key        = $cert.PublicKey.Key.Encrypt($key, $true)
+                    IV         = $cert.PublicKey.Key.Encrypt($iv , $true)
+                    Thumbprint = $cert.Thumbprint
+                }
             }
             catch
             {
@@ -850,9 +834,9 @@ function Add-KeyData
 
         foreach ($secureString in $Password)
         {
-            $match = $protectedData.KeyData |
+            $match = $InputObject.KeyData |
                      Where-Object {
-                         $_.PSObject.TypeNames -match 'PowerShellUtils\.Cryptography\.PasswordProtectedKeyData$' -and
+                         $null -ne $_.Hash -and
                          $_.Hash -eq (Get-PasswordHash -Password $secureString -Salt $_.HashSalt -IterationCount $_.IterationCount)
                      }
             
@@ -868,14 +852,6 @@ function Unprotect-MatchingKeyData
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        [ValidateScript({
-            if ($null -eq (ConvertTo-ProtectedData -InputObject $_))
-            {
-                throw 'InputObject argument must be a ProtectedData object.'
-            }
-
-            return $true
-        })]
         $InputObject,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
@@ -887,8 +863,6 @@ function Unprotect-MatchingKeyData
         $Password
     )
 
-    $protectedData = ConvertTo-ProtectedData -InputObject $InputObject
-
     $doFinallyBlock = $true
     
     try
@@ -896,12 +870,12 @@ function Unprotect-MatchingKeyData
 
         if ($PSCmdlet.ParameterSetName -eq 'Certificate')
         {
-            $keyData = $protectedData.KeyData |
-                        Where-Object {
-                            $_.PSObject.TypeNames -match 'PowerShellUtils\.Cryptography\.CertificateProtectedKeyData$' -and
-                            $_.Thumbprint -eq $Certificate.Thumbprint
-                        } |
-                        Select-Object -First 1
+            $keyData = $InputObject.KeyData |
+                       Where-Object {
+                           (Test-IsCertificateProtectedKeyData -InputObject $_) -and
+                           $_.Thumbprint -eq $Certificate.Thumbprint
+                       } |
+                       Select-Object -First 1
 
             if ($null -eq $keyData)
             {
@@ -910,8 +884,8 @@ function Unprotect-MatchingKeyData
 
             try
             {
-                $key = New-Object PowerShellUtils.Cryptography.PinnedArray[byte](,$Certificate.PrivateKey.Decrypt($keyData.Key, $true))
-                $iv  = New-Object PowerShellUtils.Cryptography.PinnedArray[byte](,$Certificate.PrivateKey.Decrypt($keyData.IV , $true))
+                $key = New-Object PowerShellUtils.PinnedArray[byte](,$Certificate.PrivateKey.Decrypt($keyData.Key, $true))
+                $iv  = New-Object PowerShellUtils.PinnedArray[byte](,$Certificate.PrivateKey.Decrypt($keyData.IV , $true))
             }
             catch
             {
@@ -920,9 +894,9 @@ function Unprotect-MatchingKeyData
         }
         else
         {
-            $keyData = $protectedData.KeyData |
+            $keyData = $InputObject.KeyData |
                         Where-Object {
-                            $_.PSObject.TypeNames -match 'PowerShellUtils\.Cryptography\.PasswordProtectedKeyData$' -and
+                            (Test-IsPasswordProtectedKeyData -InputObject $_) -and
                             (Get-PasswordHash -Password $Password -Salt $_.HashSalt -IterationCount $_.IterationCount) -eq $_.Hash
                         } |
                         Select-Object -First 1
@@ -1148,7 +1122,6 @@ function Get-RandomBytes
 function Protect-KeyDataWithPassword
 {
     [CmdletBinding()]
-    [OutputType([PowerShellUtils.Cryptography.PasswordProtectedKeyData])]
     param (
         [Parameter(Mandatory = $true)]
         [System.Security.SecureString]
@@ -1193,14 +1166,14 @@ function Protect-KeyDataWithPassword
 
         $hash = Get-PasswordHash -Password $Password -Salt $hashSalt -IterationCount $IterationCount
 
-        New-Object PowerShellUtils.Cryptography.PasswordProtectedKeyData(
-            $keyStream.ToArray(),
-            $IVStream.ToArray(),
-            $keyGen.Salt,
-            $keyGen.IterationCount,
-            $hash,
-            $hashSalt
-        )
+        New-Object psobject -Property @{
+            Key            = $keyStream.ToArray()
+            IV             = $IVStream.ToArray()
+            Salt           = $keyGen.Salt
+            IterationCount = $keyGen.IterationCount
+            Hash           = $hash
+            HashSalt       = $hashSalt
+        }
     }
     catch
     {
@@ -1223,7 +1196,6 @@ function Unprotect-KeyDataWithPassword
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        [PowerShellUtils.Cryptography.PasswordProtectedKeyData]
         $KeyData,
 
         [Parameter(Mandatory = $true)]
@@ -1262,8 +1234,8 @@ function Unprotect-KeyDataWithPassword
         
         try
         {
-            $key = New-Object PowerShellUtils.Cryptography.PinnedArray[byte](,$keyStream.ToArray())
-            $iv  = New-Object PowerShellUtils.Cryptography.PinnedArray[byte](,$IVStream.ToArray())
+            $key = New-Object PowerShellUtils.PinnedArray[byte](,$keyStream.ToArray())
+            $iv  = New-Object PowerShellUtils.PinnedArray[byte](,$IVStream.ToArray())
             
             $outputObject = New-Object psobject -Property @{
                 Key = $key
@@ -1302,7 +1274,7 @@ function Unprotect-KeyDataWithPassword
 function ConvertTo-PinnedByteArray
 {
     [CmdletBinding()]
-    [OutputType([PowerShellUtils.Cryptography.PinnedArray[byte]])]
+    [OutputType([PowerShellUtils.PinnedArray[byte]])]
     param (
         [Parameter(Mandatory = $true)]
         $InputObject
@@ -1337,7 +1309,7 @@ function ConvertTo-PinnedByteArray
                 }
                 else
                 {
-                    $pinnedArray = New-Object PowerShellUtils.Cryptography.PinnedArray[byte](
+                    $pinnedArray = New-Object PowerShellUtils.PinnedArray[byte](
                         ,$byteArray.Clone()
                     )
                 }
@@ -1431,14 +1403,14 @@ function ConvertFrom-ByteArray
 function Convert-StringToPinnedByteArray
 {
     [CmdletBinding()]
-    [OutputType([PowerShellUtils.Cryptography.PinnedArray[byte]])]
+    [OutputType([PowerShellUtils.PinnedArray[byte]])]
     param (
         [Parameter(Mandatory = $true)]
         [string]
         $String
     )
 
-    New-Object PowerShellUtils.Cryptography.PinnedArray[byte](
+    New-Object PowerShellUtils.PinnedArray[byte](
         ,[System.Text.Encoding]::UTF8.GetBytes($String)
     )
 }
@@ -1446,7 +1418,7 @@ function Convert-StringToPinnedByteArray
 function Convert-SecureStringToPinnedByteArray
 {
     [CmdletBinding()]
-    [OutputType([PowerShellUtils.Cryptography.PinnedArray[byte]])]
+    [OutputType([PowerShellUtils.PinnedArray[byte]])]
     param (
         [Parameter(Mandatory = $true)]
         [System.Security.SecureString]
@@ -1457,7 +1429,7 @@ function Convert-SecureStringToPinnedByteArray
     {
         $ptr         = [System.Runtime.InteropServices.Marshal]::SecureStringToGlobalAllocUnicode($SecureString)
         $byteCount   = $SecureString.Length * 2
-        $pinnedArray = New-Object PowerShellUtils.Cryptography.PinnedArray[byte]($byteCount)
+        $pinnedArray = New-Object PowerShellUtils.PinnedArray[byte]($byteCount)
 
         [System.Runtime.InteropServices.Marshal]::Copy($ptr, $pinnedArray, 0, $byteCount)
 
@@ -1480,7 +1452,7 @@ function Convert-SecureStringToPinnedByteArray
 function Convert-PSCredentialToPinnedByteArray
 {
     [CmdletBinding()]
-    [OutputType([PowerShellUtils.Cryptography.PinnedArray[byte]])]
+    [OutputType([PowerShellUtils.PinnedArray[byte]])]
     param (
         [Parameter(Mandatory = $true)]
         [System.Management.Automation.PSCredential]
@@ -1503,7 +1475,7 @@ function Convert-PSCredentialToPinnedByteArray
         try
         {
             $bufferSize   = $passwordBytes.Count + $usernameBytes.Count + $PSCredentialHeader.Count + $sizeBytes.Count
-            $pinnedArray  = New-Object PowerShellUtils.Cryptography.PinnedArray[byte]($bufferSize)
+            $pinnedArray  = New-Object PowerShellUtils.PinnedArray[byte]($bufferSize)
 
             $destIndex = 0
 
@@ -1588,7 +1560,7 @@ function Convert-ByteArrayToSecureString
         $ss           = New-Object System.Security.SecureString            
         $memoryStream = New-Object System.IO.MemoryStream($ByteArray, $StartIndex, $ByteCount)
         $streamReader = New-Object System.IO.StreamReader($memoryStream, [System.Text.Encoding]::Unicode, $false)
-        $chars        = New-Object PowerShellUtils.Cryptography.PinnedArray[char](1024)
+        $chars        = New-Object PowerShellUtils.PinnedArray[char](1024)
 
         while (($read = $streamReader.Read($chars, 0, $chars.Count)) -gt 0)
         {
@@ -1663,121 +1635,121 @@ function Convert-ByteArrayToPSCredential
 
 } # function Convert-ByteArrayToPSCredential
 
-function ConvertTo-ProtectedData
+function Test-IsProtectedData
 {
     [CmdletBinding()]
+    [OutputType([bool])]
     param (
         [Parameter(Mandatory = $true)]
         [psobject]
         $InputObject
     )
 
-    if ($InputObject -is [PowerShellUtils.Cryptography.ProtectedData]) { return $InputObject }
+    $isValid = $true
 
     $cipherText = $InputObject.CipherText -as [byte[]]
     $type       = $InputObject.Type -as [string]
 
-    if ($null -ne $cipherText -and $cipherText.Count -gt 0 -and
-        -not [string]::IsNullOrEmpty($type) -and
-        $null -ne $InputObject.KeyData)
+    if ($null -eq $cipherText -or $cipherText.Count -eq 0 -or
+        [string]::IsNullOrEmpty($type) -or
+        $null -eq $InputObject.KeyData)
     {
-        [PowerShellUtils.Cryptography.KeyData[]] $keyData =
-            foreach ($object in $InputObject.KeyData)
-            {
-                $data = ConvertTo-KeyData -InputObject $object
-                if ($null -eq $data) { return }
-                $data
-            }
+        $isValid = $false
+    }
 
-        return New-Object PowerShellUtils.Cryptography.ProtectedData -Property @{
-            CipherText = $cipherText
-            Type       = $type
-            KeyData    = $keyData
+    if ($isValid)
+    {
+        foreach ($object in $InputObject.KeyData)
+        {
+            if (-not (Test-IsKeyData -InputObject $object))
+            {
+                $isValid = $false
+                break
+            }
         }
     }
+
+    return $isValid
 }
 
-function ConvertTo-KeyData
+function Test-IsKeyData
 {
     [CmdletBinding()]
-    [OutputType([PowerShellUtils.Cryptography.KeyData])]
+    [OutputType([bool])]
     param (
         [Parameter(Mandatory = $true)]
         [psobject]
         $InputObject
     )
 
-    if ($InputObject -is [PowerShellUtils.Cryptography.KeyData]) { return $InputObject }
+    $isValid = $true
 
     $key = $InputObject.Key -as [byte[]]
     $iv  = $InputObject.IV -as [byte[]]
 
-    if ($null -ne $key -and $null -ne $iv -and $key.Count -gt 0 -and $iv.Count -gt 0)
+    if ($null -eq $key -or $null -eq $iv -or $key.Count -eq 0 -or $iv.Count -eq 0)
     {
-        $result = $null
-
-        if ($null -eq $result) { $result = ConvertTo-PasswordProtectedKeyData -InputObject $InputObject -Key $key -IV $iv }
-        if ($null -eq $result) { $result = ConvertTo-CertificateProtectedKeyData -InputObject $InputObject -Key $key -IV $iv }
-        if ($null -ne $result) { return $result }
+        $isValid = $false
     }
+
+    if ($isValid)
+    {
+        $isCertificate = Test-IsCertificateProtectedKeyData -InputObject $InputObject
+        $isPassword    = Test-IsPasswordProtectedKeydata -InputObject $InputObject
+        $isValid       = $isCertificate -or $isPassword
+    }
+
+    return $isValid
 }
 
-function ConvertTo-PasswordProtectedKeyData
+function Test-IsPasswordProtectedKeyData
 {
     [CmdletBinding()]
-    [OutputType([PowerShellUtils.Cryptography.PasswordProtectedKeyData])]
+    [OutputType([bool])]
     param (
         [Parameter(Mandatory = $true)]
         [psobject]
-        $InputObject,
-
-        [Parameter(Mandatory = $true)]
-        [byte[]]
-        $Key,
-
-        [Parameter(Mandatory = $true)]
-        [byte[]]
-        $IV
+        $InputObject
     )
+
+    $isValid = $true
 
     $salt       = $InputObject.Salt -as [byte[]]
     $hash       = $InputObject.Hash -as [string]
     $hashSalt   = $InputObject.HashSalt -as [byte[]]
     $iterations = $InputObject.IterationCount -as [int]
 
-    if ($null -ne $salt -and $salt.Count -gt 0 -and
-        $null -ne $hashSalt -and $hashSalt.Count -gt 0 -and
-        $null -ne $iterations -and $iterations -gt 0 -and
-        $null -ne $hash -and $hash -match '^[A-F\d]+$')
+    if ($null -eq $salt -or $salt.Count -eq 0 -or
+        $null -eq $hashSalt -or $hashSalt.Count -eq 0 -or
+        $null -eq $iterations -or $iterations -eq 0 -or
+        $null -eq $hash -or $hash -notmatch '^[A-F\d]+$')
     {
-        return New-Object PowerShellUtils.Cryptography.PasswordProtectedKeyData($Key, $IV, $salt, $iterations, $hash, $hashSalt)
+        $isValid = $false
     }
+
+    return $isValid
 }
 
-function ConvertTo-CertificateProtectedKeyData
+function Test-IsCertificateProtectedKeyData
 {
     [CmdletBinding()]
-    [OutputType([PowerShellUtils.Cryptography.CertificateProtectedKeyData])]
+    [OutputType([bool])]
     param (
         [Parameter(Mandatory = $true)]
         [psobject]
-        $InputObject,
-
-        [Parameter(Mandatory = $true)]
-        [byte[]]
-        $Key,
-
-        [Parameter(Mandatory = $true)]
-        [byte[]]
-        $IV
+        $InputObject
     )
+
+    $isValid = $true
 
     $thumbprint = $InputObject.Thumbprint -as [string]
 
-    if ($null -ne $thumbprint -and $thumbprint -match '^[A-F\d]+$')
+    if ($null -eq $thumbprint -or $thumbprint -notmatch '^[A-F\d]+$')
     {
-        return New-Object PowerShellUtils.Cryptography.CertificateProtectedKeyData($Key, $IV, $thumbprint)
+        $isValid = $false
     }
+
+    return $isValid
 }
 
 #endregion
