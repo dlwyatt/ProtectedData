@@ -555,8 +555,10 @@ function Add-ProtectedDataCredential
         {
             $InputObject
         }
-    }
-}
+
+    } # process
+
+} # function Add-ProtectedDataCredential
 
 function Remove-ProtectedDataCredential
 {
@@ -662,7 +664,8 @@ function Remove-ProtectedDataCredential
             $InputObject
         }
     }
-}
+
+} # function Remove-ProtectedDataCredential
 
 function Get-ProtectedDataSupportedTypes
 {
@@ -773,6 +776,11 @@ function Get-KeyEncryptionCertificate
 
 #endregion
 
+Export-ModuleMember -Function 'Protect-Data', 'Unprotect-Data', 'Get-ProtectedDataSupportedTypes',
+                              'Add-ProtectedDataCredential', 'Remove-ProtectedDataCredential',
+                              'Get-KeyEncryptionCertificate'
+
+
 #region Helper functions
 
 function Add-KeyData
@@ -845,7 +853,8 @@ function Add-KeyData
             Protect-KeyDataWithPassword -Password $secureString -Key $key -IV $iv -IterationCount $PasswordIterationCount
         }
     )
-}
+
+} # function Add-KeyData
 
 function Unprotect-MatchingKeyData
 {
@@ -934,7 +943,7 @@ function Unprotect-MatchingKeyData
         }
     }
 
-}
+} # function Unprotect-MatchingKeyData
 
 function ValidateKeyEncryptionCertificate
 {
@@ -1016,8 +1025,10 @@ function ValidateKeyEncryptionCertificate
         }
     
         $Certificate
-    }
-}
+
+    } # process
+
+} # function ValidateKeyEncryptionCertificate
 
 function Get-KeyGenerator
 {
@@ -1117,7 +1128,8 @@ function Get-RandomBytes
     {
         if ($rng -is [IDisposable]) { $rng.Dispose() }
     }
-}
+
+} # function Get-RandomBytes
 
 function Protect-KeyDataWithPassword
 {
@@ -1670,7 +1682,8 @@ function Test-IsProtectedData
     }
 
     return $isValid
-}
+
+} # function Test-IsProtectedData
 
 function Test-IsKeyData
 {
@@ -1700,7 +1713,8 @@ function Test-IsKeyData
     }
 
     return $isValid
-}
+
+} # function Test-IsKeyData
 
 function Test-IsPasswordProtectedKeyData
 {
@@ -1728,7 +1742,8 @@ function Test-IsPasswordProtectedKeyData
     }
 
     return $isValid
-}
+
+} # function Test-IsPasswordProtectedKeyData
 
 function Test-IsCertificateProtectedKeyData
 {
@@ -1750,10 +1765,7 @@ function Test-IsCertificateProtectedKeyData
     }
 
     return $isValid
-}
+
+} # function Test-IsCertificateProtectedKeyData
 
 #endregion
-
-Export-ModuleMember -Function 'Protect-Data', 'Unprotect-Data', 'Get-ProtectedDataSupportedTypes',
-                              'Add-ProtectedDataCredential', 'Remove-ProtectedDataCredential',
-                              'Get-KeyEncryptionCertificate'
