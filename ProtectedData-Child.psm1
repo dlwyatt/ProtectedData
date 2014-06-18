@@ -104,6 +104,14 @@ function Protect-Data
 
         [ValidateNotNull()]
         [AllowEmptyCollection()]
+        [ValidateScript({
+            if ($_.Length -eq 0)
+            {
+                throw 'You may not pass empty SecureStrings to the Password parameter'
+            }
+
+            return $true
+        })]
         [System.Security.SecureString[]]
         $Password = @(),
 
