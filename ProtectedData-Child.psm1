@@ -9,14 +9,14 @@ else
     $IgnoreError = 'Ignore'
 }
 
-$ValidTypes = @(
+$script:ValidTypes = @(
     [string],
     [System.Security.SecureString],
     [System.Management.Automation.PSCredential]
     [byte[]]
 )
 
-$PSCredentialHeader = [byte[]](5,12,19,75,80,20,19,11,11,6,11,13)
+$script:PSCredentialHeader = [byte[]](5,12,19,75,80,20,19,11,11,6,11,13)
 
 #region Exported functions
 
@@ -26,28 +26,28 @@ function Protect-Data
     .Synopsis
        Encrypts an object using one or more RSA certificates and/or passwords.
     .DESCRIPTION
-       Encrypts an object using a randomly-generated AES key.  AES key information is encrypted using one or more RSA public keys and/or password-derived keys, allowing the data to be securely shared among multiple users and computers.
-       If certificates are used, they must be installed in either the local computer or local user's certificate stores, and the certificates' Key Usage extension (if present) must allow Key Encipherment.  The private keys are not required for Protect-Data.
+       Encrypts an object using a randomly-generated AES key. AES key information is encrypted using one or more RSA public keys and/or password-derived keys, allowing the data to be securely shared among multiple users and computers.
+       If certificates are used, they must be installed in either the local computer or local user's certificate stores, and the certificates' Key Usage extension (if present) must allow Key Encipherment. The private keys are not required for Protect-Data.
     .PARAMETER InputObject
-       The object that is to be encrypted.  The object must be of one of the types returned by the Get-ProtectedDataSupportedTypes command.
+       The object that is to be encrypted. The object must be of one of the types returned by the Get-ProtectedDataSupportedTypes command.
     .PARAMETER CertificateThumbprint
-       Zero or more certificate thumbprints that should be used to encrypt the data.  The certificates must be installed in the local computer or current user's certificate stores, and must be RSA certificates.  The data can later be decrypted by using the same certificate (with its private key.)
+       Zero or more certificate thumbprints that should be used to encrypt the data. The certificates must be installed in the local computer or current user's certificate stores, and must be RSA certificates. The data can later be decrypted by using the same certificate (with its private key.)
     .PARAMETER Password
-       Zero or more SecureString objects containing password that will be used to derive encryption keys.  The data can later be decrypted by passing in a SecureString with the same value.
+       Zero or more SecureString objects containing password that will be used to derive encryption keys. The data can later be decrypted by passing in a SecureString with the same value.
     .PARAMETER SkipCertificateValidation
        If specified, the command does not attempt to validate that the specified certificate(s) came from trusted publishers and have not been revoked or expired.
        This is primarily intended to allow the use of self-signed certificates.
     .PARAMETER PasswordIterationCount
-       Optional positive integer value specifying the number of iteration that should be used when deriving encryption keys from the specified password(s).  Defaults to 1000.
+       Optional positive integer value specifying the number of iteration that should be used when deriving encryption keys from the specified password(s). Defaults to 1000.
        Higher values make it more costly to crack the passwords by brute force.
     .EXAMPLE
        $encryptedObject = Protect-Data -InputObject $myString -CertificateThumbprint CB04E7C885BEAE441B39BC843C85855D97785D25 -Password (Read-Host -AsSecureString -Prompt 'Enter password to encrypt')
 
-       Encrypts a string using a single RSA certificate, and a password.  Either the certificate or the password can be used when decrypting the data.
+       Encrypts a string using a single RSA certificate, and a password. Either the certificate or the password can be used when decrypting the data.
     .EXAMPLE
        $credential | Protect-Data -CertificateThumbprint 'CB04E7C885BEAE441B39BC843C85855D97785D25', 'B5A04AB031C24BCEE220D6F9F99B6F5D376753FB'
 
-       Encrypts a PSCredential object using two RSA certificates.  Either private key can be used to later decrypt the data.
+       Encrypts a PSCredential object using two RSA certificates. Either private key can be used to later decrypt the data.
     .INPUTS
        Object
 
@@ -58,8 +58,8 @@ function Protect-Data
        The output object contains the following properties:
 
        CipherText : An array of bytes containing the encrypted data
-       Type       : A string representation of the InputObject's original type (used when decrypting back to the original object later.)
-       KeyData    : One or more structures which contain encrypted copies of the AES key used to protect the ciphertext, and other identifying information about the way this copy of the keys was protected, such as Certificate Thumbprint, Password Hash, Salt values, and Iteration count.
+       Type : A string representation of the InputObject's original type (used when decrypting back to the original object later.)
+       KeyData : One or more structures which contain encrypted copies of the AES key used to protect the ciphertext, and other identifying information about the way this copy of the keys was protected, such as Certificate Thumbprint, Password Hash, Salt values, and Iteration count.
     .LINK
         Unprotect-Data
     .LINK
@@ -75,9 +75,9 @@ function Protect-Data
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
         [ValidateScript({
-            if ($ValidTypes -notcontains $_.GetType() -and $null -eq ($_ -as [byte[]]))
+            if ($script:ValidTypes -notcontains $_.GetType() -and $null -eq ($_ -as [byte[]]))
             {
-                throw "InputObject must be one of the following types: $($ValidTypes -join ', ')"
+                throw "InputObject must be one of the following types: $($script:ValidTypes -join ', ')"
             }
 
             if ($_ -is [System.Security.SecureString] -and $_.Length -eq 0)
@@ -130,28 +130,34 @@ function Protect-Data
             {
                 try
                 {
-                    Get-KeyEncryptionCertificate -CertificateThumbprint $thumbprint -SkipCertificateVerification:$SkipCertificateVerification -ErrorAction Stop |
+                    $params = @{
+                        CertificateThumbprint = $thumbprint
+                        SkipCertificateVerification = $SkipCertificateVerification
+                        ErrorAction = 'Stop'
+                    }
+                    Get-KeyEncryptionCertificate @params |
                     Select-Object -First 1
                 }
                 catch
                 {
                     Write-Error -ErrorRecord $_
-                }                
+                }
             }
         )
 
         if ($certs.Count -eq 0 -and $Password.Count -eq 0)
         {
-            throw 'None of the specified certificates could be used for encryption, and no passwords were specified.  Data protection cannot be performed.'
+            throw 'None of the specified certificates could be used for encryption, and no passwords were specified.' +
+                  ' Data protection cannot be performed.'
         }
     }
 
     process
     {
         $plainText = $null
-        $aes       = $null
-        $key       = $null
-        $iv        = $null
+        $aes = $null
+        $key = $null
+        $iv = $null
 
         try
         {
@@ -159,26 +165,28 @@ function Protect-Data
 
             $aes = New-Object System.Security.Cryptography.AesCryptoServiceProvider
             $key = New-Object PowerShellUtils.PinnedArray[byte](,$aes.Key)
-            $iv  = New-Object PowerShellUtils.PinnedArray[byte](,$aes.IV)
+            $iv = New-Object PowerShellUtils.PinnedArray[byte](,$aes.IV)
 
             $memoryStream = New-Object System.IO.MemoryStream
-            $cryptoStream = New-Object System.Security.Cryptography.CryptoStream($memoryStream, $aes.CreateEncryptor(), 'Write')
+            $cryptoStream = New-Object System.Security.Cryptography.CryptoStream(
+                $memoryStream, $aes.CreateEncryptor(), 'Write'
+            )
 
             $cryptoStream.Write($plainText, 0, $plainText.Count)
             $cryptoStream.FlushFinalBlock()
 
             $protectedData = New-Object psobject -Property @{
                 CipherText = $memoryStream.ToArray()
-                Type       = $InputObject.GetType().FullName
-                KeyData    = @()
+                Type = $InputObject.GetType().FullName
+                KeyData = @()
             }
 
             $params = @{
-                InputObject            = $protectedData
-                Key                    = $key
-                IV                     = $iv
-                Certificate            = $certs
-                Password               = $Password
+                InputObject = $protectedData
+                Key = $key
+                IV = $iv
+                Certificate = $certs
+                Password = $Password
                 PasswordIterationCount = $PasswordIterationCount
             }
 
@@ -196,12 +204,12 @@ function Protect-Data
         }
         finally
         {
-            if ($null -ne $aes)                  { $aes.Clear() }
+            if ($null -ne $aes) { $aes.Clear() }
             if ($cryptoStream -is [IDisposable]) { $cryptoStream.Dispose() }
             if ($memoryStream -is [IDisposable]) { $memoryStream.Dispose() }
-            if ($plainText -is [IDisposable])    { $plainText.Dispose() }
-            if ($key -is [IDisposable])          { $key.Dispose() }
-            if ($iv -is [IDisposable])           { $iv.Dispose() }
+            if ($plainText -is [IDisposable]) { $plainText.Dispose() }
+            if ($key -is [IDisposable]) { $key.Dispose() }
+            if ($iv -is [IDisposable]) { $iv.Dispose() }
         }
 
     } # process
@@ -214,13 +222,13 @@ function Unprotect-Data
     .Synopsis
        Decrypts an object that was produced by the Protect-Data command.
     .DESCRIPTION
-       Decrypts an object that was produced by the Protect-Data command.  If a Certificate is used to perform the decryption, it must be installed in either the local computer or current user's certificate stores (with its private key), and the current user must have permission to use that key.
+       Decrypts an object that was produced by the Protect-Data command. If a Certificate is used to perform the decryption, it must be installed in either the local computer or current user's certificate stores (with its private key), and the current user must have permission to use that key.
     .PARAMETER InputObject
        The ProtectedData object that is to be decrypted.
     .PARAMETER CertificateThumbprint
-       Thumbprint of an RSA certificate that will be used to decrypt the data.  This certificate must be present in either the local computer or current user's certificate stores, and the current user must have permission to use the certificate's private key.  One of the InputObject's KeyData objects must be protected with this certificate.
+       Thumbprint of an RSA certificate that will be used to decrypt the data. This certificate must be present in either the local computer or current user's certificate stores, and the current user must have permission to use the certificate's private key. One of the InputObject's KeyData objects must be protected with this certificate.
     .PARAMETER Password
-       A SecureString containing a password that will be used to derive an encryption key.  One of the InputObject's KeyData objects must be protected with this password.
+       A SecureString containing a password that will be used to derive an encryption key. One of the InputObject's KeyData objects must be protected with this password.
     .PARAMETER SkipCertificateValidation
        If specified, the command does not attempt to validate that the specified certificate(s) came from trusted publishers and have not been revoked or expired.
        This is primarily intended to allow the use of self-signed certificates.
@@ -231,7 +239,7 @@ function Unprotect-Data
     .EXAMPLE
        $decryptedObject = $encryptedObject | Unprotect-Data -Password (Read-Host -AsSecureString -Prompt 'Enter password to decrypt the data')
 
-       Decrypts the contents of $encryptedObject and outputs an object of the same type as what was originally passed to Protect-Data.  Uses a password to decrypt the object instead of a certificate.
+       Decrypts the contents of $encryptedObject and outputs an object of the same type as what was originally passed to Protect-Data. Uses a password to decrypt the object instead of a certificate.
     .INPUTS
        PSObject
 
@@ -239,7 +247,7 @@ function Unprotect-Data
     .OUTPUTS
        Object
 
-       Object may be any type returned by Get-ProtectedDataSupportedTypes.  Specifically, it will be an object of the type specified in the InputObject's Type property.
+       Object may be any type returned by Get-ProtectedDataSupportedTypes. Specifically, it will be an object of the type specified in the InputObject's Type property.
     .LINK
         Protect-Data
     .LINK
@@ -264,11 +272,12 @@ function Unprotect-Data
                 throw 'Protected data object contained no cipher text.'
             }
 
-            $t = $_.Type -as [type]
+            $type = $_.Type -as [type]
 
-            if ($null -eq $t -or $ValidTypes -notcontains $t)
+            if ($null -eq $type -or $script:ValidTypes -notcontains $type)
             {
-                throw "Protected data object specified an invalid type.  Type must be one of: $($ValidTypes -join ', ')"
+                throw 'Protected data object specified an invalid type. Type must be one of: ' +
+                      ($script:ValidTypes -join ', ')
             }
             
             return $true
@@ -304,8 +313,8 @@ function Unprotect-Data
             try
             {
                 $params = @{
-                    CertificateThumbprint       = $CertificateThumbprint
-                    RequirePrivateKey           = $true
+                    CertificateThumbprint = $CertificateThumbprint
+                    RequirePrivateKey = $true
                     SkipCertificateVerification = $SkipCertificateVerification
                 }
 
@@ -322,9 +331,9 @@ function Unprotect-Data
     process
     {
         $plainText = $null
-        $aes       = $null
-        $key       = $null
-        $iv        = $null
+        $aes = $null
+        $key = $null
+        $iv = $null
 
         if ($PSCmdlet.ParameterSetName -eq 'Certificate')
         {
@@ -338,20 +347,22 @@ function Unprotect-Data
         try
         {
             $result = Unprotect-MatchingKeyData -InputObject $InputObject @params
-            $key    = $result.Key
-            $iv     = $result.IV
+            $key = $result.Key
+            $iv = $result.IV
 
             $aes = New-Object System.Security.Cryptography.AesCryptoServiceProvider -Property @{
                 Key = $key
-                IV  = $iv
+                IV = $iv
             }
 
-            # Not sure exactly how long of a buffer we'll need to hold the decrypted data.  Twice
+            # Not sure exactly how long of a buffer we'll need to hold the decrypted data. Twice
             # the ciphertext length should be more than enough.
-            $plainText    = New-Object PowerShellUtils.PinnedArray[byte](2 * $InputObject.CipherText.Count)
+            $plainText = New-Object PowerShellUtils.PinnedArray[byte](2 * $InputObject.CipherText.Count)
 
             $memoryStream = New-Object System.IO.MemoryStream(,$plainText)
-            $cryptoStream = New-Object System.Security.Cryptography.CryptoStream($memoryStream, $aes.CreateDecryptor(), 'Write')
+            $cryptoStream = New-Object System.Security.Cryptography.CryptoStream(
+                $memoryStream, $aes.CreateDecryptor(), 'Write'
+            )
 
             $cryptoStream.Write($InputObject.CipherText, 0, $InputObject.CipherText.Count)
             $cryptoStream.FlushFinalBlock()
@@ -365,12 +376,12 @@ function Unprotect-Data
         }
         finally
         {
-            if ($null -ne $aes)                  { $aes.Clear() }
+            if ($null -ne $aes) { $aes.Clear() }
             if ($cryptoStream -is [IDisposable]) { $cryptoStream.Dispose() }
             if ($memoryStream -is [IDisposable]) { $memoryStream.Dispose() }
-            if ($plainText -is [IDisposable])    { $plainText.Dispose() }
-            if ($key -is [IDisposable])          { $key.Dispose() }
-            if ($iv -is [IDisposable])           { $iv.Dispose() }
+            if ($plainText -is [IDisposable]) { $plainText.Dispose() }
+            if ($key -is [IDisposable]) { $key.Dispose() }
+            if ($iv -is [IDisposable]) { $iv.Dispose() }
         }
 
     } # process
@@ -383,29 +394,29 @@ function Add-ProtectedDataCredential
     .Synopsis
        Adds one or more new copies of an encryption key to an object generated by Protect-Data.
     .DESCRIPTION
-       This command can be used to add new certificates and/or passwords to an object that was previously encrypted by Protect-Data.  The caller must provide one of the certificates or passwords that already exists in the ProtectedData object to perform this operation.
+       This command can be used to add new certificates and/or passwords to an object that was previously encrypted by Protect-Data. The caller must provide one of the certificates or passwords that already exists in the ProtectedData object to perform this operation.
     .PARAMETER InputObject
        The ProtectedData object which was created by an earlier call to Protect-Data.
     .PARAMETER CertificateThumbprint
-       The thumbprint of a certificate which was previously used to encrypt the ProtectedData structure's key.  This certificate must be installed in the local computer or current user's stores (with its private key), and the current user must have permission to use the private key.
+       The thumbprint of a certificate which was previously used to encrypt the ProtectedData structure's key. This certificate must be installed in the local computer or current user's stores (with its private key), and the current user must have permission to use the private key.
     .PARAMETER Password
        A password which was previously used to encrypt the ProtectedData structure's key.
     .PARAMETER NewCertificateThumbprint
-       Zero or more certificate thumbprints that should be used to encrypt the data.  The certificates must be installed in the local computer or current user's certificate stores, and must be RSA certificates.  The data can later be decrypted by using the same certificate (with its private key.)
+       Zero or more certificate thumbprints that should be used to encrypt the data. The certificates must be installed in the local computer or current user's certificate stores, and must be RSA certificates. The data can later be decrypted by using the same certificate (with its private key.)
     .PARAMETER NewPassword
-       Zero or more SecureString objects containing password that will be used to derive encryption keys.  The data can later be decrypted by passing in a SecureString with the same value.
+       Zero or more SecureString objects containing password that will be used to derive encryption keys. The data can later be decrypted by passing in a SecureString with the same value.
     .PARAMETER SkipCertificateValidation
        If specified, the command does not attempt to validate that the specified certificate(s) came from trusted publishers and have not been revoked or expired.
        This is primarily intended to allow the use of self-signed certificates.
     .PARAMETER PasswordIterationCount
-       Optional positive integer value specifying the number of iteration that should be used when deriving encryption keys from the specified password(s).  Defaults to 1000.
+       Optional positive integer value specifying the number of iteration that should be used when deriving encryption keys from the specified password(s). Defaults to 1000.
        Higher values make it more costly to crack the passwords by brute force.
     .PARAMETER Passthru
        If this switch is used, the ProtectedData object is output to the pipeline after it is modified.
     .EXAMPLE
        Add-ProtectedDataCredential -InputObject $protectedData -CertificateThumbprint $oldThumbprint -NewCertificateThumbprint $newThumbprints -NewPassword $newPasswords
 
-       Uses the certificate with thumbprint $oldThumbprint to add new key copies to the $protectedData object.  $newThumbprints would be a string array containing thumbprints, and $newPasswords would be an array of SecureString objects.
+       Uses the certificate with thumbprint $oldThumbprint to add new key copies to the $protectedData object. $newThumbprints would be a string array containing thumbprints, and $newPasswords would be an array of SecureString objects.
     .INPUTS
        [PSObject]
 
@@ -490,9 +501,9 @@ function Add-ProtectedDataCredential
             try
             {
                 $params = @{
-                    CertificateThumbprint       = $CertificateThumbprint
+                    CertificateThumbprint = $CertificateThumbprint
                     SkipCertificateVerification = $SkipCertificateVerification
-                    RequirePrivateKey           = $true
+                    RequirePrivateKey = $true
                 }
 
                 $decryptionCert = Get-KeyEncryptionCertificate @params -ErrorAction Stop |
@@ -509,19 +520,25 @@ function Add-ProtectedDataCredential
             {
                 try
                 {
-                    Get-KeyEncryptionCertificate -CertificateThumbprint $thumbprint -SkipCertificateVerification:$SkipCertificateVerification -ErrorAction Stop |
+                    $params = @{
+                        CertificateThumbprint = $thumbprint
+                        SkipCertificateVerification = $SkipCertificateVerification
+                        ErrorAction = 'Stop'
+                    }
+                    Get-KeyEncryptionCertificate @params |
                     Select-Object -First 1
                 }
                 catch
                 {
                     Write-Error -ErrorRecord $_
-                }                
+                }
             }
         )
 
         if ($certs.Count -eq 0 -and $NewPassword.Count -eq 0)
         {
-            throw 'None of the specified certificates could be used for encryption, and no passwords were specified.  Data protection cannot be performed.'
+            throw 'None of the specified certificates could be used for encryption, and no passwords were ' +
+                  'specified. Data protection cannot be performed.'
         }
 
     } # begin
@@ -538,13 +555,13 @@ function Add-ProtectedDataCredential
         }
 
         $key = $null
-        $iv  = $null
+        $iv = $null
 
         try
         {
             $result = Unprotect-MatchingKeyData -InputObject $InputObject @params
-            $key    = $result.Key
-            $iv     = $result.IV
+            $key = $result.Key
+            $iv = $result.IV
 
             Add-KeyData -InputObject $InputObject -Key $key -IV $iv -Certificate $certs -Password $NewPassword
         }
@@ -556,7 +573,7 @@ function Add-ProtectedDataCredential
         finally
         {
             if ($key -is [IDisposable]) { $key.Dispose() }
-            if ($iv -is [IDisposable])  { $iv.Dispose() }
+            if ($iv -is [IDisposable]) { $iv.Dispose() }
         }
 
         if ($Passthru)
@@ -650,7 +667,12 @@ function Remove-ProtectedDataCredential
                 {
                     foreach ($secureString in $Password)
                     {
-                        if ($keyData.Hash -eq (Get-PasswordHash -Password $secureString -Salt $keyData.HashSalt -IterationCount $keyData.IterationCount))
+                        $params = @{
+                            Password = $secureString
+                            Salt = $keyData.HashSalt
+                            IterationCount = $keyData.IterationCount
+                        }
+                        if ($keyData.Hash -eq (Get-PasswordHash @params))
                         {
                             $keyData
                         }
@@ -687,7 +709,7 @@ function Get-ProtectedDataSupportedTypes
     .OUTPUTS
        Type[]
     .NOTES
-       This function allows you to know which InputObject types are supported by the Protect-Data and Unprotect-Data commands in this version of the module.  This list may expand over time, will always be backwards-compatible with previously-encrypted data.
+       This function allows you to know which InputObject types are supported by the Protect-Data and Unprotect-Data commands in this version of the module. This list may expand over time, will always be backwards-compatible with previously-encrypted data.
     .LINK
        Protect-Data
     .LINK
@@ -698,7 +720,7 @@ function Get-ProtectedDataSupportedTypes
     [OutputType([Type[]])]
     param ( )
 
-    $ValidTypes
+    $script:ValidTypes
 }
 
 function Get-KeyEncryptionCertificate
@@ -707,23 +729,23 @@ function Get-KeyEncryptionCertificate
     .Synopsis
        Finds certificates which can be used by Protect-Data and related commands.
     .DESCRIPTION
-       Searches the given path, and all child paths, for certificates which can be used by Protect-Data.  Such certificates must support Key Encipherment usage, and by default, must not be expired and must be issued by a trusted authority.
+       Searches the given path, and all child paths, for certificates which can be used by Protect-Data. Such certificates must support Key Encipherment usage, and by default, must not be expired and must be issued by a trusted authority.
     .PARAMETER Path
-       Path which should be searched for the certifictes.  Defaults to the entire Cert: drive.
+       Path which should be searched for the certifictes. Defaults to the entire Cert: drive.
     .PARAMETER CertificateThumbprint
-       Thumbprints which should be included in the search.  Wildcards are allowed.  Defaults to '*'.
+       Thumbprints which should be included in the search. Wildcards are allowed. Defaults to '*'.
     .PARAMETER SkipCertificateVerification
-       If this switch is used, the command will include certificates which are not yet valid, expired, revoked, or issued by an untrusted authority.  This can be useful if you wish to use a self-signed certificate for encryption.
+       If this switch is used, the command will include certificates which are not yet valid, expired, revoked, or issued by an untrusted authority. This can be useful if you wish to use a self-signed certificate for encryption.
     .PARAMETER RequirePrivateKey
        If this switch is used, the command will only output certificates which have a usable private key on this computer.
     .EXAMPLE
        Get-KeyEncryptionCertificate -Path Cert:\CurrentUser -RequirePrivateKey -SkipCertificateVerification
 
-       Searches for certificates which support key encipherment and have a private key installed.  All matching certificates are returned, and they do not need to be verified for trust, revocation or validity period.
+       Searches for certificates which support key encipherment and have a private key installed. All matching certificates are returned, and they do not need to be verified for trust, revocation or validity period.
     .EXAMPLE
        Get-KeyEncryptionCertificate -Path Cert:\CurrentUser\TrustedPeople
 
-       Searches the current user's Trusted People store for certificates that can be used with Protect-Data.  Certificates must be current, issued by a trusted authority, and not revoked, but they do not need to have a private key available to the current user.
+       Searches the current user's Trusted People store for certificates that can be used with Protect-Data. Certificates must be current, issued by a trusted authority, and not revoked, but they do not need to have a private key available to the current user.
     .INPUTS
        None.
     .OUTPUTS
@@ -756,9 +778,9 @@ function Get-KeyEncryptionCertificate
     )
 
     # Suppress error output if we're doing a wildcard search (unless user specifically asks for it via -ErrorAction)
-    # This is a little ugly, may rework this later now that I've made Get-KeyEncryptionCertificate public.  Originally
+    # This is a little ugly, may rework this later now that I've made Get-KeyEncryptionCertificate public. Originally
     # it was only used to search for a single thumbprint, and threw errors back to the caller if no suitable cert could
-    # be found.  Now I want it to also be used as a search tool for users to identify suitable certificates.  Maybe just
+    # be found. Now I want it to also be used as a search tool for users to identify suitable certificates. Maybe just
     # needs to be two separate functions, one internal and one public.
 
     if (-not $PSBoundParameters.ContainsKey('ErrorAction') -and
@@ -778,7 +800,11 @@ function Get-KeyEncryptionCertificate
         throw "Certificate '$CertificateThumbprint' was not found."
     }
     
-    $certs | ValidateKeyEncryptionCertificate -SkipCertificateVerification:$SkipCertificateVerification -RequirePrivateKey:$RequirePrivateKey
+    $params = @{
+        SkipCertificateVerification = $SkipCertificateVerification
+        RequirePrivateKey = $RequirePrivateKey
+    }
+    $certs | ValidateKeyEncryptionCertificate @params
 
 } # function Get-KeyEncryptionCertificate
 
@@ -837,8 +863,8 @@ function Add-KeyData
             try
             {
                 New-Object psobject -Property @{
-                    Key        = $cert.PublicKey.Key.Encrypt($key, $true)
-                    IV         = $cert.PublicKey.Key.Encrypt($iv , $true)
+                    Key = $cert.PublicKey.Key.Encrypt($key, $true)
+                    IV = $cert.PublicKey.Key.Encrypt($iv , $true)
                     Thumbprint = $cert.Thumbprint
                 }
             }
@@ -852,13 +878,25 @@ function Add-KeyData
         {
             $match = $InputObject.KeyData |
                      Where-Object {
-                         $null -ne $_.Hash -and
-                         $_.Hash -eq (Get-PasswordHash -Password $secureString -Salt $_.HashSalt -IterationCount $_.IterationCount)
+                        $params = @{
+                            Password = $secureString
+                            Salt = $_.HashSalt
+                            IterationCount = $_.IterationCount
+                        }
+
+                        $null -ne $_.Hash -and $_.Hash -eq (Get-PasswordHash @params)
                      }
             
             if ($null -ne $match) { continue }
             
-            Protect-KeyDataWithPassword -Password $secureString -Key $key -IV $iv -IterationCount $PasswordIterationCount
+            $params = @{
+                Password = $secureString
+                Key = $key
+                IV = $iv
+                IterationCount = $PasswordIterationCount
+            }
+
+            Protect-KeyDataWithPassword @params
         }
     )
 
@@ -887,12 +925,12 @@ function Unprotect-MatchingKeyData
 
         if ($PSCmdlet.ParameterSetName -eq 'Certificate')
         {
-            $keyData = $InputObject.KeyData |
-                       Where-Object {
-                           (Test-IsCertificateProtectedKeyData -InputObject $_) -and
-                           $_.Thumbprint -eq $Certificate.Thumbprint
-                       } |
-                       Select-Object -First 1
+            $keyData =
+            $InputObject.KeyData |
+           Where-Object {
+               (Test-IsCertificateProtectedKeyData -InputObject $_) -and $_.Thumbprint -eq $Certificate.Thumbprint
+           } |
+           Select-Object -First 1
 
             if ($null -eq $keyData)
             {
@@ -901,8 +939,12 @@ function Unprotect-MatchingKeyData
 
             try
             {
-                $key = New-Object PowerShellUtils.PinnedArray[byte](,$Certificate.PrivateKey.Decrypt($keyData.Key, $true))
-                $iv  = New-Object PowerShellUtils.PinnedArray[byte](,$Certificate.PrivateKey.Decrypt($keyData.IV , $true))
+                $key = New-Object PowerShellUtils.PinnedArray[byte](
+                    ,$Certificate.PrivateKey.Decrypt($keyData.Key, $true)
+                )
+                $iv = New-Object PowerShellUtils.PinnedArray[byte](
+                    ,$Certificate.PrivateKey.Decrypt($keyData.IV , $true)
+                )
             }
             catch
             {
@@ -911,12 +953,13 @@ function Unprotect-MatchingKeyData
         }
         else
         {
-            $keyData = $InputObject.KeyData |
-                        Where-Object {
-                            (Test-IsPasswordProtectedKeyData -InputObject $_) -and
-                            (Get-PasswordHash -Password $Password -Salt $_.HashSalt -IterationCount $_.IterationCount) -eq $_.Hash
-                        } |
-                        Select-Object -First 1
+            $keyData =
+            $InputObject.KeyData |
+            Where-Object {
+                (Test-IsPasswordProtectedKeyData -InputObject $_) -and
+                $_.Hash -eq (Get-PasswordHash -Password $Password -Salt $_.HashSalt -IterationCount $_.IterationCount)
+            } |
+            Select-Object -First 1
 
             if ($null -eq $keyData)
             {
@@ -926,8 +969,8 @@ function Unprotect-MatchingKeyData
             try
             {
                 $result = Unprotect-KeyDataWithPassword -KeyData $keyData -Password $Password
-                $key    = $result.Key
-                $iv     = $result.IV
+                $key = $result.Key
+                $iv = $result.IV
             }
             catch
             {
@@ -939,7 +982,7 @@ function Unprotect-MatchingKeyData
 
         New-Object psobject -Property @{
             Key = $key
-            IV  = $iv
+            IV = $iv
         }
     }
     finally
@@ -947,7 +990,7 @@ function Unprotect-MatchingKeyData
         if ($doFinallyBlock)
         {
             if ($key -is [IDisposable]) { $key.Dispose() }
-            if ($iv  -is [IDisposable]) { $iv.Dispose() }
+            if ($iv -is [IDisposable]) { $iv.Dispose() }
         }
     }
 
@@ -992,9 +1035,9 @@ function ValidateKeyEncryptionCertificate
             }
         }
 
-        $keyUsageFound   = $false
+        $keyUsageFound = $false
         $keyEncipherment = [System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::KeyEncipherment
-        $keyUsageFlags   = 0
+        $keyUsageFlags = 0
 
         foreach ($extension in $Certificate.Extensions)
         {
@@ -1007,7 +1050,8 @@ function ValidateKeyEncryptionCertificate
         
         if ($keyUsageFound -and ($keyUsageFlags -band $keyEncipherment) -ne $keyEncipherment)
         {
-            Write-Error "Certificate '$($Certificate.Thumbprint)' contains a Key Usage extension which does not allow Key Encipherment."
+            Write-Error "Certificate '$($Certificate.Thumbprint)' contains a Key Usage extension which does not " +
+                        "allow Key Encipherment."
             return
         }
     
@@ -1019,10 +1063,11 @@ function ValidateKeyEncryptionCertificate
         
         if ($RequirePrivateKey)
         {
-            $privateCert = Get-ChildItem -Path 'Cert:\' -Recurse -Include $Certificate.Thumbprint -ErrorAction $IgnoreError |
-                           Where-Object { $_.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider] } |
-                           Select-Object -First 1
-        
+            $privateCert =
+            Get-ChildItem -Path 'Cert:\' -Recurse -Include $Certificate.Thumbprint -ErrorAction $IgnoreError |
+            Where-Object { $_.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider] } |
+            Select-Object -First 1
+
             if ($null -eq $privateCert)
             {
                 Write-Error "Could not find private key for certificate '$($Certificate.Thumbprint)'."
@@ -1060,11 +1105,11 @@ function Get-KeyGenerator
 
     try
     {
-        $byteArray  = Convert-SecureStringToPinnedByteArray -SecureString $Password
+        $byteArray = Convert-SecureStringToPinnedByteArray -SecureString $Password
 
         if ($PSCmdlet.ParameterSetName -eq 'RestoreExisting')
         {
-            $saltBytes  = $Salt
+            $saltBytes = $Salt
         }
         else
         {
@@ -1126,7 +1171,7 @@ function Get-RandomBytes
 
     try
     {
-        $rng   = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
+        $rng = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
         $bytes = New-Object byte[]($Count)
         $rng.GetBytes($bytes)
 
@@ -1160,24 +1205,28 @@ function Protect-KeyDataWithPassword
         $IterationCount = 1000
     )
     
-    $aes             = $null
-    $keyStream       = $null
+    $aes = $null
+    $keyStream = $null
     $keyCryptoStream = $null
-    $IVStream        = $null
-    $IVCryptoStream  = $null
-    $keyGen          = $null
+    $IVStream = $null
+    $IVCryptoStream = $null
+    $keyGen = $null
 
     try
     {
-        $keyGen          = Get-KeyGenerator -Password $Password -IterationCount $IterationCount
-        $aes             = New-Object System.Security.Cryptography.AesCryptoServiceProvider
-        $aes.Key         = $keyGen.GetBytes(32)
-        $aes.IV          = $keyGen.GetBytes($aes.BlockSize / 8)
-        $keyStream       = New-Object System.IO.MemoryStream
-        $IVStream        = New-Object System.IO.MemoryStream
-        $keyCryptoStream = New-Object System.Security.Cryptography.CryptoStream($keyStream, $aes.CreateEncryptor(), 'Write')
-        $IVCryptoStream  = New-Object System.Security.Cryptography.CryptoStream($IVStream, $aes.CreateEncryptor(), 'Write')
-        $hashSalt        = Get-RandomBytes -Count 32
+        $keyGen = Get-KeyGenerator -Password $Password -IterationCount $IterationCount
+        $aes = New-Object System.Security.Cryptography.AesCryptoServiceProvider
+        $aes.Key = $keyGen.GetBytes(32)
+        $aes.IV = $keyGen.GetBytes($aes.BlockSize / 8)
+        $keyStream = New-Object System.IO.MemoryStream
+        $IVStream = New-Object System.IO.MemoryStream
+        $keyCryptoStream = New-Object System.Security.Cryptography.CryptoStream(
+            $keyStream, $aes.CreateEncryptor(), 'Write'
+        )
+        $IVCryptoStream = New-Object System.Security.Cryptography.CryptoStream(
+            $IVStream, $aes.CreateEncryptor(), 'Write'
+        )
+        $hashSalt = Get-RandomBytes -Count 32
 
         $keyCryptoStream.Write($Key, 0, $Key.Count)
         $keyCryptoStream.FlushFinalBlock()
@@ -1187,12 +1236,12 @@ function Protect-KeyDataWithPassword
         $hash = Get-PasswordHash -Password $Password -Salt $hashSalt -IterationCount $IterationCount
 
         New-Object psobject -Property @{
-            Key            = $keyStream.ToArray()
-            IV             = $IVStream.ToArray()
-            Salt           = $keyGen.Salt
+            Key = $keyStream.ToArray()
+            IV = $IVStream.ToArray()
+            Salt = $keyGen.Salt
             IterationCount = $keyGen.IterationCount
-            Hash           = $hash
-            HashSalt       = $hashSalt
+            Hash = $hash
+            HashSalt = $hashSalt
         }
     }
     catch
@@ -1201,12 +1250,12 @@ function Protect-KeyDataWithPassword
     }
     finally
     {
-        if ($null -ne $aes)                     { $aes.Clear() }
+        if ($null -ne $aes) { $aes.Clear() }
         if ($keyCryptoStream -is [IDisposable]) { $keyCryptoStream.Dispose() }
-        if ($IVCryptoStream -is [IDisposable])  { $IVCryptoStream.Dispose() }
-        if ($keyStream -is [IDisposable])       { $keyStream.Dispose() }
-        if ($IVStream -is [IDisposable])        { $IVStream.Dispose() }
-        if ($keyGen -is [IDisposable])          { $keyGen.Dispose() }
+        if ($IVCryptoStream -is [IDisposable]) { $IVCryptoStream.Dispose() }
+        if ($keyStream -is [IDisposable]) { $keyStream.Dispose() }
+        if ($IVStream -is [IDisposable]) { $IVStream.Dispose() }
+        if ($keyGen -is [IDisposable]) { $keyGen.Dispose() }
     }
 
 } # function Protect-KeyDataWithPassword
@@ -1224,26 +1273,36 @@ function Unprotect-KeyDataWithPassword
     )
 
     # Derive an encryption key from the provided KeyData and Password parameters, and attempt to decrypt the
-    # KeyData's Key and IV arrays using the derived key.  If successful, return an object containing the
+    # KeyData's Key and IV arrays using the derived key. If successful, return an object containing the
     # decrypted key / IV, which will be used to initialize a crypto provider.
 
-    $keyGen          = $null
-    $aes             = $null
-    $keyStream       = $null
+    $keyGen = $null
+    $aes = $null
+    $keyStream = $null
     $keyCryptoStream = $null
-    $IVStream        = $null
-    $IVCryptoStream  = $null
+    $IVStream = $null
+    $IVCryptoStream = $null
 
     try
     {
-        $keyGen          = Get-KeyGenerator -Password $Password -Salt $KeyData.Salt.Clone() -IterationCount $KeyData.IterationCount
-        $aes             = New-Object System.Security.Cryptography.AesCryptoServiceProvider
-        $aes.Key         = $keyGen.GetBytes(32)
-        $aes.IV          = $keyGen.GetBytes($aes.BlockSize / 8)
-        $keyStream       = New-Object System.IO.MemoryStream
-        $IVStream        = New-Object System.IO.MemoryStream
-        $keyCryptoStream = New-Object System.Security.Cryptography.CryptoStream($keyStream, $aes.CreateDecryptor(), 'Write')
-        $IVCryptoStream  = New-Object System.Security.Cryptography.CryptoStream($IVStream, $aes.CreateDecryptor(), 'Write')
+        $params = @{
+            Password = $Password
+            Salt = $KeyData.Salt.Clone()
+            IterationCount = $KeyData.IterationCount
+        }
+
+        $keyGen = Get-KeyGenerator @params
+        $aes = New-Object System.Security.Cryptography.AesCryptoServiceProvider
+        $aes.Key = $keyGen.GetBytes(32)
+        $aes.IV = $keyGen.GetBytes($aes.BlockSize / 8)
+        $keyStream = New-Object System.IO.MemoryStream
+        $IVStream = New-Object System.IO.MemoryStream
+        $keyCryptoStream = New-Object System.Security.Cryptography.CryptoStream(
+            $keyStream, $aes.CreateDecryptor(), 'Write'
+        )
+        $IVCryptoStream = New-Object System.Security.Cryptography.CryptoStream(
+            $IVStream, $aes.CreateDecryptor(), 'Write'
+        )
 
         $keyCryptoStream.Write($KeyData.Key, 0, $KeyData.Key.Count)
         $keyCryptoStream.FlushFinalBlock()
@@ -1255,11 +1314,11 @@ function Unprotect-KeyDataWithPassword
         try
         {
             $key = New-Object PowerShellUtils.PinnedArray[byte](,$keyStream.ToArray())
-            $iv  = New-Object PowerShellUtils.PinnedArray[byte](,$IVStream.ToArray())
+            $iv = New-Object PowerShellUtils.PinnedArray[byte](,$IVStream.ToArray())
             
             $outputObject = New-Object psobject -Property @{
                 Key = $key
-                IV  = $iv
+                IV = $iv
             }
             
             $doFinallyBlock = $false
@@ -1269,7 +1328,7 @@ function Unprotect-KeyDataWithPassword
             if ($doFinallyBlock)
             {
                 if ($key -is [IDisposable]) { $key.Dispose() }
-                if ($iv  -is [IDisposable]) { $iv.Dispose() }
+                if ($iv -is [IDisposable]) { $iv.Dispose() }
             }
         }
 
@@ -1281,12 +1340,12 @@ function Unprotect-KeyDataWithPassword
     }
     finally
     {
-        if ($null -ne $aes)                     { $aes.Clear() }
+        if ($null -ne $aes) { $aes.Clear() }
         if ($keyCryptoStream -is [IDisposable]) { $keyCryptoStream.Dispose() }
-        if ($IVCryptoStream -is [IDisposable])  { $IVCryptoStream.Dispose() }
-        if ($keyStream -is [IDisposable])       { $keyStream.Dispose() }
-        if ($IVStream -is [IDisposable])        { $IVStream.Dispose() }
-        if ($keyGen -is [IDisposable])          { $keyGen.Dispose() }        
+        if ($IVCryptoStream -is [IDisposable]) { $IVCryptoStream.Dispose() }
+        if ($keyStream -is [IDisposable]) { $keyStream.Dispose() }
+        if ($IVStream -is [IDisposable]) { $IVStream.Dispose() }
+        if ($keyGen -is [IDisposable]) { $keyGen.Dispose() }
     }
 
 } # function Unprotect-KeyDataWithPassword
@@ -1356,9 +1415,9 @@ function ConvertFrom-ByteArray
 
         [Parameter(Mandatory = $true)]
         [ValidateScript({
-            if ($ValidTypes -notcontains $_)
+            if ($script:ValidTypes -notcontains $_)
             {
-                throw "Invalid type specified.  Type must be one of: $($ValidTypes -join ', ')"
+                throw "Invalid type specified. Type must be one of: $($script:ValidTypes -join ', ')"
             }
 
             return $true
@@ -1447,8 +1506,8 @@ function Convert-SecureStringToPinnedByteArray
 
     try
     {
-        $ptr         = [System.Runtime.InteropServices.Marshal]::SecureStringToGlobalAllocUnicode($SecureString)
-        $byteCount   = $SecureString.Length * 2
+        $ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToGlobalAllocUnicode($SecureString)
+        $byteCount = $SecureString.Length * 2
         $pinnedArray = New-Object PowerShellUtils.PinnedArray[byte]($byteCount)
 
         [System.Runtime.InteropServices.Marshal]::Copy($ptr, $pinnedArray, 0, $byteCount)
@@ -1480,13 +1539,13 @@ function Convert-PSCredentialToPinnedByteArray
     )
 
     $passwordBytes = $null
-    $pinnedArray   = $null
+    $pinnedArray = $null
 
     try
     {
         $passwordBytes = Convert-SecureStringToPinnedByteArray -SecureString $Credential.Password
         $usernameBytes = [System.Text.Encoding]::Unicode.GetBytes($Credential.UserName)
-        $sizeBytes     = [System.BitConverter]::GetBytes([uint32]$usernameBytes.Count)
+        $sizeBytes = [System.BitConverter]::GetBytes([uint32]$usernameBytes.Count)
 
         if (-not [System.BitConverter]::IsLittleEndian) { [Array]::Reverse($sizeBytes) }
 
@@ -1494,13 +1553,18 @@ function Convert-PSCredentialToPinnedByteArray
 
         try
         {
-            $bufferSize   = $passwordBytes.Count + $usernameBytes.Count + $PSCredentialHeader.Count + $sizeBytes.Count
-            $pinnedArray  = New-Object PowerShellUtils.PinnedArray[byte]($bufferSize)
+            $bufferSize = $passwordBytes.Count +
+                          $usernameBytes.Count +
+                          $script:PSCredentialHeader.Count +
+                          $sizeBytes.Count
+            $pinnedArray = New-Object PowerShellUtils.PinnedArray[byte]($bufferSize)
 
             $destIndex = 0
 
-            [Array]::Copy($PSCredentialHeader, 0, $pinnedArray.Array, $destIndex, $PSCredentialHeader.Count)
-            $destIndex += $PSCredentialHeader.Count
+            [Array]::Copy(
+                $script:PSCredentialHeader, 0, $pinnedArray.Array, $destIndex, $script:PSCredentialHeader.Count
+            )
+            $destIndex += $script:PSCredentialHeader.Count
         
             [Array]::Copy($sizeBytes, 0, $pinnedArray.Array, $destIndex, $sizeBytes.Count)
             $destIndex += $sizeBytes.Count
@@ -1571,16 +1635,16 @@ function Convert-ByteArrayToSecureString
         $ByteCount
     )
 
-    $chars        = $null
+    $chars = $null
     $memoryStream = $null
     $streamReader = $null
 
     try
     {
-        $ss           = New-Object System.Security.SecureString            
+        $ss = New-Object System.Security.SecureString
         $memoryStream = New-Object System.IO.MemoryStream($ByteArray, $StartIndex, $ByteCount)
         $streamReader = New-Object System.IO.StreamReader($memoryStream, [System.Text.Encoding]::Unicode, $false)
-        $chars        = New-Object PowerShellUtils.PinnedArray[char](1024)
+        $chars = New-Object PowerShellUtils.PinnedArray[char](1024)
 
         while (($read = $streamReader.Read($chars, 0, $chars.Count)) -gt 0)
         {
@@ -1597,7 +1661,7 @@ function Convert-ByteArrayToSecureString
     {
         if ($streamReader -is [IDisposable]) { $streamReader.Dispose() }
         if ($memoryStream -is [IDisposable]) { $memoryStream.Dispose() }
-        if ($chars -is [IDisposable])        { $chars.Dispose() }
+        if ($chars -is [IDisposable]) { $chars.Dispose() }
     }
 
 } # function Convert-ByteArrayToSecureString
@@ -1622,14 +1686,14 @@ function Convert-ByteArrayToPSCredential
 
     $message = 'Byte array is not a serialized PSCredential object.'
 
-    if ($ByteCount -lt $PSCredentialHeader.Count + 4) { throw $message }
+    if ($ByteCount -lt $script:PSCredentialHeader.Count + 4) { throw $message }
 
-    for ($i = 0; $i -lt $PSCredentialHeader.Count; $i++)
+    for ($i = 0; $i -lt $script:PSCredentialHeader.Count; $i++)
     {
-        if ($ByteArray[$StartIndex + $i] -ne $PSCredentialHeader[$i]) { throw $message }
+        if ($ByteArray[$StartIndex + $i] -ne $script:PSCredentialHeader[$i]) { throw $message }
     }
 
-    $i = $StartIndex + $PSCredentialHeader.Count
+    $i = $StartIndex + $script:PSCredentialHeader.Count
 
     $sizeBytes = $ByteArray[$i..($i+3)]
     if (-not [System.BitConverter]::IsLittleEndian) { [array]::Reverse($sizeBytes) }
@@ -1644,7 +1708,12 @@ function Convert-ByteArrayToPSCredential
 
     try
     {
-        $secureString = Convert-ByteArrayToSecureString -ByteArray $ByteArray -StartIndex $i -ByteCount ($StartIndex + $ByteCount - $i)
+        $params = @{
+            ByteArray = $ByteArray
+            StartIndex = $i
+            ByteCount = $StartIndex + $ByteCount - $i
+        }
+        $secureString = Convert-ByteArrayToSecureString @params
     }
     catch
     {
@@ -1668,7 +1737,7 @@ function Test-IsProtectedData
     $isValid = $true
 
     $cipherText = $InputObject.CipherText -as [byte[]]
-    $type       = $InputObject.Type -as [string]
+    $type = $InputObject.Type -as [string]
 
     if ($null -eq $cipherText -or $cipherText.Count -eq 0 -or
         [string]::IsNullOrEmpty($type) -or
@@ -1706,7 +1775,7 @@ function Test-IsKeyData
     $isValid = $true
 
     $key = $InputObject.Key -as [byte[]]
-    $iv  = $InputObject.IV -as [byte[]]
+    $iv = $InputObject.IV -as [byte[]]
 
     if ($null -eq $key -or $null -eq $iv -or $key.Count -eq 0 -or $iv.Count -eq 0)
     {
@@ -1716,8 +1785,8 @@ function Test-IsKeyData
     if ($isValid)
     {
         $isCertificate = Test-IsCertificateProtectedKeyData -InputObject $InputObject
-        $isPassword    = Test-IsPasswordProtectedKeydata -InputObject $InputObject
-        $isValid       = $isCertificate -or $isPassword
+        $isPassword = Test-IsPasswordProtectedKeydata -InputObject $InputObject
+        $isValid = $isCertificate -or $isPassword
     }
 
     return $isValid
@@ -1736,9 +1805,9 @@ function Test-IsPasswordProtectedKeyData
 
     $isValid = $true
 
-    $salt       = $InputObject.Salt -as [byte[]]
-    $hash       = $InputObject.Hash -as [string]
-    $hashSalt   = $InputObject.HashSalt -as [byte[]]
+    $salt = $InputObject.Salt -as [byte[]]
+    $hash = $InputObject.Hash -as [string]
+    $hashSalt = $InputObject.HashSalt -as [byte[]]
     $iterations = $InputObject.IterationCount -as [int]
 
     if ($null -eq $salt -or $salt.Count -eq 0 -or
