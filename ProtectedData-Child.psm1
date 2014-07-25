@@ -147,8 +147,8 @@ function Protect-Data
 
         if ($certs.Count -eq 0 -and $Password.Count -eq 0)
         {
-            throw 'None of the specified certificates could be used for encryption, and no passwords were specified.' +
-                  ' Data protection cannot be performed.'
+            throw ('None of the specified certificates could be used for encryption, and no passwords were specified.' +
+                  ' Data protection cannot be performed.')
         }
     }
 
@@ -1050,8 +1050,8 @@ function ValidateKeyEncryptionCertificate
         
         if ($keyUsageFound -and ($keyUsageFlags -band $keyEncipherment) -ne $keyEncipherment)
         {
-            Write-Error "Certificate '$($Certificate.Thumbprint)' contains a Key Usage extension which does not " +
-                        "allow Key Encipherment."
+            Write-Error ("Certificate '$($Certificate.Thumbprint)' contains a Key Usage extension which does not" +
+                        "allow Key Encipherment.")
             return
         }
     

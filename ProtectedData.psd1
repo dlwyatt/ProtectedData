@@ -8,7 +8,7 @@
 
 @{
     ModuleToProcess        = 'ProtectedData.psm1'
-    ModuleVersion          = '0.0.0.1'
+    ModuleVersion          = '1.0.0.1'
     GUID                   = 'fc6a2f6a-563d-422a-85b5-9638e45a370e'
     Author                 = 'Dave Wyatt'
     CompanyName            = 'Home'
