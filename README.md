@@ -1,6 +1,6 @@
 ProtectedData
 =============
 
-PowerShell Module for securely encrypting and sharing secret data such as passwords.
+PowerShell Module for securely encrypting and sharing secret data.
 
-This is still in development, and may change drastically before I publish it to PSGet / TechNet.  Any feedback on the user experience and/or review of the security / encryption practices in the code is welcome.
+Passwords, other encryption keys, your secret family recipe for baked beans, whatever!  If you don't want to store something in the clear, and need to be able to decrypt the data as more than one user (or on more than one computer), this module can help.
