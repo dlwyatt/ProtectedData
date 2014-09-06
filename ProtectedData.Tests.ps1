@@ -125,6 +125,27 @@ NotAfter = "$notAfterString"
     }
 }
 
+function Remove-TestCertificate
+{
+    $oldCerts = @(
+        Get-ChildItem Cert:\CurrentUser\My |
+        Where-Object { $_.Subject -eq $testCertificateSubject }
+    )
+
+    if ($oldCerts.Count -gt 0)
+    {
+        $store = Get-Item Cert:\CurrentUser\My
+        $store.Open('ReadWrite')
+
+        foreach ($oldCert in $oldCerts)
+        {
+            $store.Remove($oldCert)
+        }
+
+        $store.Close()
+    }
+}
+
 Describe 'Module Load' {
     It 'Loads the module without errors' {
         $moduleManifest = Join-Path -Path $scriptRoot -ChildPath ProtectedData.psd1
@@ -252,24 +273,8 @@ Describe 'Password-based encryption and decryption' {
     }
 }
 
-Describe 'Certificate-based encryption and decryption' {
-    $oldCerts = @(
-        Get-ChildItem Cert:\CurrentUser\My |
-        Where-Object { $_.Subject -eq $testCertificateSubject }
-    )
-
-    if ($oldCerts.Count -gt 0)
-    {
-        $store = Get-Item Cert:\CurrentUser\My
-        $store.Open('ReadWrite')
-
-        foreach ($oldCert in $oldCerts)
-        {
-            $store.Remove($oldCert)
-        }
-
-        $store.Close()
-    }
+Describe 'Certificate-based encryption and decryption (By thumbprint)' {
+    Remove-TestCertificate
 
     $path = @{}
 
@@ -398,6 +403,130 @@ Describe 'Certificate-based encryption and decryption' {
     Context 'Protecting Byte Arrays' {
         $protectedData = Protect-Data -InputObject $byteArrayToEncrypt -CertificateThumbprint $certThumbprint -SkipCertificateVerification
         $decrypted = Unprotect-Data -InputObject $protectedData -CertificateThumbprint $certThumbprint -SkipCertificateVerification
+
+        It 'Does not return null' {
+            ,$decrypted | Should Not Be $null
+        }
+
+        It 'Returns a byte array' {
+            $decrypted.GetType().FullName | Should Be System.Byte[]
+        }
+
+        It 'Decrypts the byte array properly' {
+            ($byteArrayToEncrypt.Length -eq $decrypted.Length -and (-join $byteArrayToEncrypt) -eq (-join $decrypted)) | Should Be $True
+        }
+    }
+
+    Remove-TestCertificate
+}
+
+Describe 'Certificate-Based encryption and decryption (By certificate object)' {
+    $certFromFile = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$scriptRoot\TestCertificateFile.pfx", 'password')
+    $SecondCertFromFile = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$scriptRoot\TestCertificateFile2.pfx", 'password')
+    $WrongCertFromFile = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$scriptRoot\TestCertificateFile3.pfx", 'password')
+
+    Context 'General Usage' {
+        It 'Produces an error if a self-signed certificate is used, without the -SkipCertificateVerification switch' {
+            { $null = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile -ErrorAction Stop } | Should Throw
+        }
+
+        It 'Does not produce an error when a self-signed certificate is used, if the -SkipCertificateVerification switch is also used.' {
+            { $null = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
+        }
+
+        $protected = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile, $secondCertFromFile -SkipCertificateVerification
+
+        It 'Produces an error if a decryption attempt with the wrong certificate is made.' {
+            { $null = Unprotect-Data -InputObject $protected -Certificate $wrongCertFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Throw
+        }
+
+        It 'Allows any of the specified certificates to be used during decryption (First thumbprint test)' {
+            { $null = Unprotect-Data -InputObject $protected -Certificate $certFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
+        }
+
+        It 'Allows any of the specified certificates to be used during decryption (Second thumbprint test)' {
+            { $null = Unprotect-Data -InputObject $protected -Certificate $secondCertFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
+        }
+
+        It 'Adds a new certificate to an existing object' {
+            $scriptBlock = {
+                Add-ProtectedDataCredential -InputObject $protected -Certificate $secondCertFromFile -NewCertificate $wrongCertFromFile -SkipCertificateVerification
+            }
+
+            $scriptBlock | Should Not Throw
+        }
+
+        It 'Allows the object to be decrypted with the new certificate' {
+            { $null = Unprotect-Data -InputObject $protected -Certificate $wrongCertFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
+        }
+
+        It 'Removes a certificate from the object' {
+            { $null = Remove-ProtectedDataCredential -InputObject $protected -Certificate $secondCertFromFile } | Should Not Throw
+        }
+
+        It 'No longer allows the data to be decrypted with the removed password' {
+            { $null = Unprotect-Data -InputObject $protected -Certificate $secondCertFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Throw
+        }
+    }
+
+    Context 'Protecting strings' {
+        $protectedData = $stringToEncrypt | Protect-Data -Certificate $certFromFile -SkipCertificateVerification
+        $decrypted = $protectedData | Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification
+
+        It 'Does not return null' {
+            $decrypted | Should Not Be $null
+        }
+
+        It 'Returns a String object' {
+            $decrypted.GetType().FullName | Should Be System.String
+        }
+
+        It 'Decrypts the string properly.' {
+            $decrypted | Should Be $stringToEncrypt
+        }
+    }
+
+    Context 'Protecting SecureStrings' {
+        $protectedData = $secureStringToEncrypt | Protect-Data -Certificate $certFromFile -SkipCertificateVerification
+        $decrypted = $protectedData | Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification
+
+        It 'Does not return null' {
+            $decrypted | Should Not Be $null
+        }
+
+        It 'Returns a SecureString object' {
+            $decrypted.GetType().FullName | Should Be System.Security.SecureString
+        }
+
+        It 'Decrypts the SecureString properly.' {
+            Get-PlainTextFromSecureString -SecureString $decrypted | Should Be $stringToEncrypt
+        }
+    }
+
+    Context 'Protecting PSCredentials' {
+        $protectedData = $credentialToEncrypt | Protect-Data -Certificate $certFromFile -SkipCertificateVerification
+        $decrypted = $protectedData | Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification
+
+        It 'Does not return null' {
+            $decrypted | Should Not Be $null
+        }
+
+        It 'Returns a PSCredential object' {
+            $decrypted.GetType().FullName | Should Be System.Management.Automation.PSCredential
+        }
+
+        It 'Decrypts the PSCredential properly (username)' {
+            $decrypted.UserName | Should Be $userName
+        }
+
+        It 'Decrypts the PSCredential properly (password)' {
+            Get-PlainTextFromSecureString -SecureString $decrypted.Password | Should Be $stringToEncrypt
+        }
+    }
+
+    Context 'Protecting Byte Arrays' {
+        $protectedData = Protect-Data -InputObject $byteArrayToEncrypt -Certificate $certFromFile -SkipCertificateVerification
+        $decrypted = Unprotect-Data -InputObject $protectedData -Certificate $certFromFile -SkipCertificateVerification
 
         It 'Does not return null' {
             ,$decrypted | Should Not Be $null

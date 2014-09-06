@@ -30,6 +30,8 @@ function Protect-Data
        The object that is to be encrypted. The object must be of one of the types returned by the Get-ProtectedDataSupportedTypes command.
     .PARAMETER CertificateThumbprint
        Zero or more certificate thumbprints that should be used to encrypt the data. The certificates must be installed in the local computer or current user's certificate stores, and must be RSA certificates. The data can later be decrypted by using the same certificate (with its private key.)
+    .PARAMETER Certificate
+       Zero or more X509Certificate2 objects that should be used to encrypt the data.  Using this parameter instead of CertificateThumbprint can offer more flexibility, as the certificate may be loaded from a file instead of being installed in a certificate store.
     .PARAMETER Password
        Zero or more SecureString objects containing password that will be used to derive encryption keys. The data can later be decrypted by passing in a SecureString with the same value.
     .PARAMETER SkipCertificateValidation
@@ -100,6 +102,11 @@ function Protect-Data
         [string[]]
         $CertificateThumbprint = @(),
 
+        [ValidateNotNullOrEmpty()]
+        [AllowEmptyCollection()]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2[]]
+        $Certificate = @(),
+
         [ValidateNotNull()]
         [AllowEmptyCollection()]
         [ValidateScript({
@@ -140,6 +147,11 @@ function Protect-Data
                 {
                     Write-Error -ErrorRecord $_
                 }
+            }
+
+            foreach ($cert in $Certificate)
+            {
+                ValidateKeyEncryptionCertificate -CertificateGroup $cert -SkipCertificateVerification:$SkipCertificateVerification
             }
         )
 
@@ -225,6 +237,8 @@ function Unprotect-Data
        The ProtectedData object that is to be decrypted.
     .PARAMETER CertificateThumbprint
        Thumbprint of an RSA certificate that will be used to decrypt the data. This certificate must be present in either the local computer or current user's certificate stores, and the current user must have permission to use the certificate's private key. One of the InputObject's KeyData objects must be protected with this certificate.
+    .PARAMETER Certificate
+       An X509Certificate2 object that should be used to decrypt the data.  Using this parameter instead of CertificateThumbprint can offer more flexibility, as the certificate may be loaded from a file instead of being installed in a certificate store.  One of the InputObject's KeyData objects must be protected with this certificate.
     .PARAMETER Password
        A SecureString containing a password that will be used to derive an encryption key. One of the InputObject's KeyData objects must be protected with this password.
     .PARAMETER SkipCertificateValidation
@@ -282,7 +296,7 @@ function Unprotect-Data
         })]
         $InputObject,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
+        [Parameter(Mandatory = $true, ParameterSetName = 'Thumbprint')]
         [ValidateScript({
             if ($_ -notmatch '^[A-F\d]+$')
             {
@@ -293,6 +307,10 @@ function Unprotect-Data
         })]
         [string]
         $CertificateThumbprint,
+
+        [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        $Certificate,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Password')]
         [System.Security.SecureString]
@@ -324,6 +342,23 @@ function Unprotect-Data
                 throw
             }
         }
+        elseif ($Certificate)
+        {
+            try
+            {
+                $params = @{
+                    CertificateGroup = $Certificate
+                    RequirePrivateKey = $true
+                    SkipCertificateVerification = $SkipCertificateVerification
+                }
+
+                $cert = ValidateKeyEncryptionCertificate @params -ErrorAction Stop
+            }
+            catch
+            {
+                throw
+            }
+        }
     }
 
     process
@@ -333,7 +368,7 @@ function Unprotect-Data
         $key = $null
         $iv = $null
 
-        if ($PSCmdlet.ParameterSetName -eq 'Certificate')
+        if ($null -ne $cert)
         {
             $params = @{ Certificate = $cert }
         }
@@ -397,10 +432,14 @@ function Add-ProtectedDataCredential
        The ProtectedData object which was created by an earlier call to Protect-Data.
     .PARAMETER CertificateThumbprint
        The thumbprint of a certificate which was previously used to encrypt the ProtectedData structure's key. This certificate must be installed in the local computer or current user's stores (with its private key), and the current user must have permission to use the private key.
+    .PARAMETER Certificate
+       An X509Certificate2 object which was previously used to encrypt the ProtectedData structure's key.  Using this parameter instead of CertificateThumbprint can offer more flexibility, as the certificate may be loaded from a file instead of being installed in a certificate store.  The certificate object must have a private key.
     .PARAMETER Password
        A password which was previously used to encrypt the ProtectedData structure's key.
     .PARAMETER NewCertificateThumbprint
        Zero or more certificate thumbprints that should be used to encrypt the data. The certificates must be installed in the local computer or current user's certificate stores, and must be RSA certificates. The data can later be decrypted by using the same certificate (with its private key.)
+    .PARAMETER NewCertificate
+       Zero or more X509Certificate2 objects that should be used to encrypt the data.  Using this parameter instead of CertificateThumbprint can offer more flexibility, as the certificate may be loaded from a file instead of being installed in a certificate store.
     .PARAMETER NewPassword
        Zero or more SecureString objects containing password that will be used to derive encryption keys. The data can later be decrypted by passing in a SecureString with the same value.
     .PARAMETER SkipCertificateValidation
@@ -445,7 +484,7 @@ function Add-ProtectedDataCredential
         })]
         $InputObject,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
+        [Parameter(Mandatory = $true, ParameterSetName = 'Thumbprint')]
         [ValidateScript({
             if ($_ -notmatch '^[A-F\d]+$')
             {
@@ -456,6 +495,10 @@ function Add-ProtectedDataCredential
         })]
         [string]
         $CertificateThumbprint,
+
+        [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        $Certificate,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Password')]
         [System.Security.SecureString]
@@ -473,6 +516,11 @@ function Add-ProtectedDataCredential
         })]
         [string[]]
         $NewCertificateThumbprint = @(),
+
+        [ValidateNotNull()]
+        [AllowEmptyCollection()]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2[]]
+        $NewCertificate = @(),
 
         [ValidateNotNull()]
         [AllowEmptyCollection()]
@@ -494,7 +542,7 @@ function Add-ProtectedDataCredential
     {
         $decryptionCert = $null
 
-        if ($PSCmdlet.ParameterSetName -eq 'Certificate')
+        if ($PSCmdlet.ParameterSetName -eq 'Thumbprint')
         {
             try
             {
@@ -506,6 +554,23 @@ function Add-ProtectedDataCredential
 
                 $decryptionCert = Get-KeyEncryptionCertificate @params -ErrorAction Stop |
                                   Select-Object -First 1
+            }
+            catch
+            {
+                throw
+            }
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq 'Certificate')
+        {
+            try
+            {
+                $params = @{
+                    CertificateGroup = $Certificate
+                    SkipCertificateVerification = $SkipCertificateVerification
+                    RequirePrivateKey = $true
+                }
+
+                $decryptionCert = ValidateKeyEncryptionCertificate @params -ErrorAction Stop
             }
             catch
             {
@@ -531,6 +596,11 @@ function Add-ProtectedDataCredential
                     Write-Error -ErrorRecord $_
                 }
             }
+
+            foreach ($cert in $NewCertificate)
+            {
+                ValidateKeyEncryptionCertificate -CertificateGroup $cert -SkipCertificateVerification:$SkipCertificateVerification
+            }
         )
 
         if ($certs.Count -eq 0 -and $NewPassword.Count -eq 0)
@@ -543,7 +613,7 @@ function Add-ProtectedDataCredential
 
     process
     {
-        if ($PSCmdlet.ParameterSetName -eq 'Certificate')
+        if ($null -ne $decryptionCert)
         {
             $params = @{ Certificate = $decryptionCert }
         }
@@ -594,6 +664,8 @@ function Remove-ProtectedDataCredential
        The ProtectedData object which is to be modified.
     .PARAMETER CertificateThumbprint
        Thumbprints of the certificates that you wish to remove from this ProtectedData object.
+    .PARAMETER Certificate
+       X509Certificate2 objects that you wish to remove from this ProtectedData object.
     .PARAMETER Password
        Passwords in SecureString form which are to be removed from this ProtectedData object.
     .PARAMETER Passthru
@@ -645,12 +717,23 @@ function Remove-ProtectedDataCredential
 
         [ValidateNotNull()]
         [AllowEmptyCollection()]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2[]]
+        $Certificate,
+
+        [ValidateNotNull()]
+        [AllowEmptyCollection()]
         [System.Security.SecureString[]]
         $Password,
 
         [switch]
         $Passthru
     )
+
+    begin
+    {
+        $thumbprints = $CertificateThumbprint + ($Certificate | Select-Object -ExpandProperty Thumbprint) |
+                       Get-Unique
+    }
 
     process
     {
@@ -659,7 +742,7 @@ function Remove-ProtectedDataCredential
             {
                 if (Test-IsCertificateProtectedKeyData -InputObject $keyData)
                 {
-                    if ($CertificateThumbprint -contains $keyData.Thumbprint) { $keyData }
+                    if ($thumbprints -contains $keyData.Thumbprint) { $keyData }
                 }
                 elseif (Test-IsPasswordProtectedKeyData -InputObject $keyData)
                 {
@@ -800,7 +883,11 @@ function Get-KeyEncryptionCertificate
         SkipCertificateVerification = $SkipCertificateVerification
         RequirePrivateKey = $RequirePrivateKey
     }
-    $certGroups | ValidateKeyEncryptionCertificate @params
+
+    foreach ($group in $certGroups)
+    {
+        ValidateKeyEncryptionCertificate -CertificateGroup $group.Group @params
+    }
 
 } # function Get-KeyEncryptionCertificate
 
@@ -992,8 +1079,7 @@ function ValidateKeyEncryptionCertificate
     [CmdletBinding()]
     [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
     param (
-        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
-        [Microsoft.PowerShell.Commands.GroupInfo]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2[]]
         $CertificateGroup,
 
         [switch]
@@ -1005,7 +1091,7 @@ function ValidateKeyEncryptionCertificate
 
     process
     {
-        $Certificate = $CertificateGroup.Group[0]
+        $Certificate = $CertificateGroup[0]
 
         if ($Certificate.PublicKey.Key -isnot [System.Security.Cryptography.RSACryptoServiceProvider])
         {
@@ -1056,7 +1142,7 @@ function ValidateKeyEncryptionCertificate
 
         if ($RequirePrivateKey)
         {
-            $Certificate = $CertificateGroup.Group |
+            $Certificate = $CertificateGroup |
                            Where-Object { $_.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider] } |
                            Select-Object -First 1
 
