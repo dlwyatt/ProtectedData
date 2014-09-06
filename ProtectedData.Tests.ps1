@@ -253,9 +253,28 @@ Describe 'Password-based encryption and decryption' {
 }
 
 Describe 'Certificate-based encryption and decryption' {
-    Get-ChildItem Cert:\CurrentUser\My |
-    Where-Object { $_.Subject -eq $testCertificateSubject } |
-    Remove-Item
+    $oldCerts = @(
+        Get-ChildItem Cert:\CurrentUser\My |
+        Where-Object { $_.Subject -eq $testCertificateSubject }
+    )
+
+    if ($oldCerts.Count -gt 0)
+    {
+        $store = Get-Item Cert:\CurrentUser\My
+        $store.Open('ReadWrite')
+        $store.Certificates.RemoveRange($oldCerts)
+        $store.Close()
+    }
+
+    $path = @{}
+
+    if ($PSVersionTable.PSVersion.Major -le 2)
+    {
+        # The certificate provider in PowerShell 2.0 is quite slow for some reason, and filtering
+        # this test down to the store where we know the certs are located makes it less painful
+        # to run this test.
+        $path = @{ Path = 'Cert:\CurrentUser\My' }
+    }
 
     $certThumbprint = New-TestCertificate -Subject $testCertificateSubject
     $secondCertThumbprint = New-TestCertificate -Subject $testCertificateSubject
@@ -263,7 +282,7 @@ Describe 'Certificate-based encryption and decryption' {
 
     Context 'Finding suitable certificates for encryption and decryption' {
         $certificates = @(
-            Get-KeyEncryptionCertificate -SkipCertificateVerification -RequirePrivateKey |
+            Get-KeyEncryptionCertificate @path -SkipCertificateVerification -RequirePrivateKey |
             Where-Object { ($certThumbprint, $secondCertThumbprint, $wrongCertThumbprint) -contains $_.Thumbprint }
         )
 
