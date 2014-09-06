@@ -101,7 +101,7 @@ NotBefore = "$notBeforeString"
 NotAfter = "$notAfterString"
 
 "@
-    
+
     try
     {
         $oldCerts = @(
@@ -262,7 +262,12 @@ Describe 'Certificate-based encryption and decryption' {
     {
         $store = Get-Item Cert:\CurrentUser\My
         $store.Open('ReadWrite')
-        $store.Certificates.RemoveRange($oldCerts)
+
+        foreach ($oldCert in $oldCerts)
+        {
+            $store.Remove($oldCert)
+        }
+
         $store.Close()
     }
 
@@ -307,11 +312,11 @@ Describe 'Certificate-based encryption and decryption' {
         }
 
         It 'Allows any of the specified certificates to be used during decryption (First thumbprint test)' {
-            { $null = Unprotect-Data -InputObject $protected -CertificateThumbprint $certThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw            
+            { $null = Unprotect-Data -InputObject $protected -CertificateThumbprint $certThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
         }
 
         It 'Allows any of the specified certificates to be used during decryption (Second thumbprint test)' {
-            { $null = Unprotect-Data -InputObject $protected -CertificateThumbprint $secondCertThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw            
+            { $null = Unprotect-Data -InputObject $protected -CertificateThumbprint $secondCertThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
         }
 
         It 'Adds a new certificate to an existing object' {
