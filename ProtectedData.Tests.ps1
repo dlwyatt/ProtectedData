@@ -1,5 +1,7 @@
 Import-Module Pester -ErrorAction Stop
 
+Set-StrictMode -Version Latest
+
 $scriptRoot = Split-Path $MyInvocation.MyCommand.Path -Parent
 
 $stringToEncrypt = 'This is my string.'
@@ -538,6 +540,49 @@ Describe 'Certificate-Based encryption and decryption (By certificate object)' {
 
         It 'Decrypts the byte array properly' {
             ($byteArrayToEncrypt.Length -eq $decrypted.Length -and (-join $byteArrayToEncrypt) -eq (-join $decrypted)) | Should Be $True
+        }
+    }
+}
+
+Describe 'Legacy Padding Support' {
+    $certFromFile = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$scriptRoot\TestCertificateFile.pfx", 'password')
+    $stringToEncrypt = 'This is a test'
+
+    Context 'Loading protected data from previous version of module' {
+        $protectedData = Import-Clixml -Path $scriptRoot\V1.0.ProtectedWithTestCertificateFile.pfx.xml
+        Set-StrictMode -Version Latest
+
+        It 'Unprotects the data properly even with strict mode enabled' {
+            { $protectedData | Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification } | Should Not Throw
+            $protectedData | Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification | Should Be $stringToEncrypt
+        }
+    }
+
+    Context 'Using legacy padding' {
+        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile -SkipCertificateVerification -UseLegacyPadding
+
+        It 'Assigns the use legacy padding property' {
+            $protectedData.KeyData[0].LegacyPadding | Should Be $true
+        }
+
+        It 'Decrypts data properly' {
+            $protectedData |
+            Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification |
+            Should Be $stringToEncrypt
+        }
+    }
+
+    Context 'Using OAEP padding' {
+        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile -SkipCertificateVerification
+
+        It 'Does not assign the use legacy padding property' {
+            $protectedData.KeyData[0].LegacyPadding | Should Be $false
+        }
+
+        It 'Decrypts data properly' {
+            $protectedData |
+            Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification |
+            Should Be $stringToEncrypt
         }
     }
 }

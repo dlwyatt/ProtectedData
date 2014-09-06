@@ -32,6 +32,8 @@ function Protect-Data
        Zero or more certificate thumbprints that should be used to encrypt the data. The certificates must be installed in the local computer or current user's certificate stores, and must be RSA certificates. The data can later be decrypted by using the same certificate (with its private key.)
     .PARAMETER Certificate
        Zero or more X509Certificate2 objects that should be used to encrypt the data.  Using this parameter instead of CertificateThumbprint can offer more flexibility, as the certificate may be loaded from a file instead of being installed in a certificate store.
+    .PARAMETER UseLegacyPadding
+       Optional switch specifying that when performing certificate-based encryption, PKCS#1 v1.5 padding should be used instead of the newer, more secure OAEP padding scheme.  Some certificates may not work properly with OAEP padding
     .PARAMETER Password
        Zero or more SecureString objects containing password that will be used to derive encryption keys. The data can later be decrypted by passing in a SecureString with the same value.
     .PARAMETER SkipCertificateValidation
@@ -106,6 +108,9 @@ function Protect-Data
         [AllowEmptyCollection()]
         [System.Security.Cryptography.X509Certificates.X509Certificate2[]]
         $Certificate = @(),
+
+        [switch]
+        $UseLegacyPadding,
 
         [ValidateNotNull()]
         [AllowEmptyCollection()]
@@ -198,6 +203,7 @@ function Protect-Data
                 Certificate = $certs
                 Password = $Password
                 PasswordIterationCount = $PasswordIterationCount
+                UseLegacyPadding = $UseLegacyPadding
             }
 
             Add-KeyData @params
@@ -440,6 +446,8 @@ function Add-ProtectedDataCredential
        Zero or more certificate thumbprints that should be used to encrypt the data. The certificates must be installed in the local computer or current user's certificate stores, and must be RSA certificates. The data can later be decrypted by using the same certificate (with its private key.)
     .PARAMETER NewCertificate
        Zero or more X509Certificate2 objects that should be used to encrypt the data.  Using this parameter instead of CertificateThumbprint can offer more flexibility, as the certificate may be loaded from a file instead of being installed in a certificate store.
+    .PARAMETER UseLegacyPadding
+       Optional switch specifying that when performing certificate-based encryption, PKCS#1 v1.5 padding should be used instead of the newer, more secure OAEP padding scheme.  Some certificates may not work properly with OAEP padding
     .PARAMETER NewPassword
        Zero or more SecureString objects containing password that will be used to derive encryption keys. The data can later be decrypted by passing in a SecureString with the same value.
     .PARAMETER SkipCertificateValidation
@@ -500,6 +508,11 @@ function Add-ProtectedDataCredential
         [System.Security.Cryptography.X509Certificates.X509Certificate2]
         $Certificate,
 
+        [Parameter(ParameterSetName = 'Certificate')]
+        [Parameter(ParameterSetName = 'Thumbprint')]
+        [switch]
+        $UseLegacyPaddingForDecryption,
+
         [Parameter(Mandatory = $true, ParameterSetName = 'Password')]
         [System.Security.SecureString]
         $Password,
@@ -521,6 +534,9 @@ function Add-ProtectedDataCredential
         [AllowEmptyCollection()]
         [System.Security.Cryptography.X509Certificates.X509Certificate2[]]
         $NewCertificate = @(),
+
+        [switch]
+        $UseLegacyPadding,
 
         [ValidateNotNull()]
         [AllowEmptyCollection()]
@@ -631,7 +647,7 @@ function Add-ProtectedDataCredential
             $key = $result.Key
             $iv = $result.IV
 
-            Add-KeyData -InputObject $InputObject -Key $key -IV $iv -Certificate $certs -Password $NewPassword
+            Add-KeyData -InputObject $InputObject -Key $key -IV $iv -Certificate $certs -Password $NewPassword -UseLegacyPadding:$UseLegacyPadding
         }
         catch
         {
@@ -915,6 +931,9 @@ function Add-KeyData
         [System.Security.Cryptography.X509Certificates.X509Certificate2[]]
         $Certificate = @(),
 
+        [switch]
+        $UseLegacyPadding,
+
         [ValidateNotNull()]
         [AllowEmptyCollection()]
         [System.Security.SecureString[]]
@@ -930,6 +949,8 @@ function Add-KeyData
         return
     }
 
+    $useOAEP = -not $UseLegacyPadding
+
     $InputObject.KeyData += @(
         foreach ($cert in $Certificate)
         {
@@ -941,9 +962,10 @@ function Add-KeyData
             try
             {
                 New-Object psobject -Property @{
-                    Key = $cert.PublicKey.Key.Encrypt($key, $true)
-                    IV = $cert.PublicKey.Key.Encrypt($iv , $true)
+                    Key = $cert.PublicKey.Key.Encrypt($key, $useOAEP)
+                    IV = $cert.PublicKey.Key.Encrypt($iv , $useOAEP)
                     Thumbprint = $cert.Thumbprint
+                    LegacyPadding = [bool] $UseLegacyPadding
                 }
             }
             catch
@@ -991,7 +1013,7 @@ function Unprotect-MatchingKeyData
         [System.Security.Cryptography.X509Certificates.X509Certificate2]
         $Certificate,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Passwword')]
+        [Parameter(Mandatory = $true, ParameterSetName = 'Password')]
         [System.Security.SecureString]
         $Password
     )
@@ -1015,13 +1037,15 @@ function Unprotect-MatchingKeyData
                 throw "Protected data object was not encrypted with certificate '$($Certificate.Thumbprint)'."
             }
 
+            $useOAEP = -not $keyData.LegacyPadding
+
             try
             {
                 $key = New-Object PowerShellUtils.PinnedArray[byte](
-                    ,$Certificate.PrivateKey.Decrypt($keyData.Key, $true)
+                    ,$Certificate.PrivateKey.Decrypt($keyData.Key, $useOAEP)
                 )
                 $iv = New-Object PowerShellUtils.PinnedArray[byte](
-                    ,$Certificate.PrivateKey.Decrypt($keyData.IV , $true)
+                    ,$Certificate.PrivateKey.Decrypt($keyData.IV , $useOAEP)
                 )
             }
             catch
