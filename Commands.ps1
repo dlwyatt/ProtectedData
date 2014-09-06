@@ -1,5 +1,3 @@
-#requires -Version 2.0
-
 if ($PSVersionTable.PSVersion.Major -eq 2)
 {
     $IgnoreError = 'SilentlyContinue'
@@ -809,11 +807,6 @@ function Get-KeyEncryptionCertificate
 } # function Get-KeyEncryptionCertificate
 
 #endregion
-
-Export-ModuleMember -Function 'Protect-Data', 'Unprotect-Data', 'Get-ProtectedDataSupportedTypes',
-                              'Add-ProtectedDataCredential', 'Remove-ProtectedDataCredential',
-                              'Get-KeyEncryptionCertificate'
-
 
 #region Helper functions
 
