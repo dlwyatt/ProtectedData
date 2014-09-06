@@ -277,7 +277,7 @@ function Unprotect-Data
                 throw 'Protected data object specified an invalid type. Type must be one of: ' +
                       ($script:ValidTypes -join ', ')
             }
-            
+
             return $true
         })]
         $InputObject,
@@ -341,7 +341,7 @@ function Unprotect-Data
         {
             $params = @{ Password = $Password }
         }
-        
+
         try
         {
             $result = Unprotect-MatchingKeyData -InputObject $InputObject @params
@@ -787,22 +787,20 @@ function Get-KeyEncryptionCertificate
         $ErrorActionPreference = $IgnoreError
     }
 
-    # Locate and validate a suitable key encipherment certificate matching the specified thumbprint
+    $certGroups = Get-ChildItem -Path $Path -Recurse -Include $CertificateThumbprint -ErrorAction $IgnoreError |
+                  Where-Object { $_ -is [System.Security.Cryptography.X509Certificates.X509Certificate2] } |
+                  Group-Object -Property Thumbprint
 
-    $certs = Get-ChildItem -Path $Path -Recurse -Include $CertificateThumbprint -ErrorAction $IgnoreError |
-             Where-Object { $_ -is [System.Security.Cryptography.X509Certificates.X509Certificate2] } |
-             Sort-Object -Unique -Property Thumbprint
-    
-    if ($null -eq $certs)
+    if ($null -eq $certGroups)
     {
         throw "Certificate '$CertificateThumbprint' was not found."
     }
-    
+
     $params = @{
         SkipCertificateVerification = $SkipCertificateVerification
         RequirePrivateKey = $RequirePrivateKey
     }
-    $certs | ValidateKeyEncryptionCertificate @params
+    $certGroups | ValidateKeyEncryptionCertificate @params
 
 } # function Get-KeyEncryptionCertificate
 
@@ -850,7 +848,7 @@ function Add-KeyData
         {
             $match = $InputObject.KeyData |
                      Where-Object { $_.Thumbprint -eq $cert.Thumbprint }
-            
+
             if ($null -ne $match) { continue }
 
             try
@@ -879,9 +877,9 @@ function Add-KeyData
 
                         $null -ne $_.Hash -and $_.Hash -eq (Get-PasswordHash @params)
                      }
-            
+
             if ($null -ne $match) { continue }
-            
+
             $params = @{
                 Password = $secureString
                 Key = $key
@@ -912,7 +910,7 @@ function Unprotect-MatchingKeyData
     )
 
     $doFinallyBlock = $true
-    
+
     try
     {
 
@@ -958,7 +956,7 @@ function Unprotect-MatchingKeyData
             {
                 throw 'Protected data object was not encrypted with the specified password.'
             }
-            
+
             try
             {
                 $result = Unprotect-KeyDataWithPassword -KeyData $keyData -Password $Password
@@ -970,7 +968,7 @@ function Unprotect-MatchingKeyData
                 throw
             }
         }
-        
+
         $doFinallyBlock = $false
 
         New-Object psobject -Property @{
@@ -995,8 +993,8 @@ function ValidateKeyEncryptionCertificate
     [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
-        [System.Security.Cryptography.X509Certificates.X509Certificate2]
-        $Certificate,
+        [Microsoft.PowerShell.Commands.GroupInfo]
+        $CertificateGroup,
 
         [switch]
         $SkipCertificateVerification,
@@ -1007,6 +1005,8 @@ function ValidateKeyEncryptionCertificate
 
     process
     {
+        $Certificate = $CertificateGroup.Group[0]
+
         if ($Certificate.PublicKey.Key -isnot [System.Security.Cryptography.RSACryptoServiceProvider])
         {
             Write-Error "Certficiate '$($Certificate.Thumbprint)' is not an RSA certificate."
@@ -1040,36 +1040,33 @@ function ValidateKeyEncryptionCertificate
                 $keyUsageFlags = $keyUsageFlags -bor $extension.KeyUsages
             }
         }
-        
+
         if ($keyUsageFound -and ($keyUsageFlags -band $keyEncipherment) -ne $keyEncipherment)
         {
             Write-Error ("Certificate '$($Certificate.Thumbprint)' contains a Key Usage extension which does not" +
                         "allow Key Encipherment.")
             return
         }
-    
+
         if (-not $SkipCertificateVerification -and -not $Certificate.Verify())
         {
             Write-Error "Verification of certificate '$($Certificate.Thumbprint)' failed."
             return
         }
-        
+
         if ($RequirePrivateKey)
         {
-            $privateCert =
-            Get-ChildItem -Path 'Cert:\' -Recurse -Include $Certificate.Thumbprint -ErrorAction $IgnoreError |
-            Where-Object { $_.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider] } |
-            Select-Object -First 1
+            $Certificate = $CertificateGroup.Group |
+                           Where-Object { $_.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider] } |
+                           Select-Object -First 1
 
-            if ($null -eq $privateCert)
+            if ($null -eq $Certificate)
             {
                 Write-Error "Could not find private key for certificate '$($Certificate.Thumbprint)'."
                 return
             }
-
-            $Certificate = $privateCert
         }
-    
+
         $Certificate
 
     } # process
@@ -1197,7 +1194,7 @@ function Protect-KeyDataWithPassword
         [int]
         $IterationCount = 1000
     )
-    
+
     $aes = $null
     $keyStream = $null
     $keyCryptoStream = $null
@@ -1303,17 +1300,17 @@ function Unprotect-KeyDataWithPassword
         $IVCryptoStream.FlushFinalBlock()
 
         $doFinallyBlock = $true
-        
+
         try
         {
             $key = New-Object PowerShellUtils.PinnedArray[byte](,$keyStream.ToArray())
             $iv = New-Object PowerShellUtils.PinnedArray[byte](,$IVStream.ToArray())
-            
+
             $outputObject = New-Object psobject -Property @{
                 Key = $key
                 IV = $iv
             }
-            
+
             $doFinallyBlock = $false
         }
         finally
@@ -1459,7 +1456,7 @@ function ConvertFrom-ByteArray
         {
             $array = New-Object byte[]($ByteCount)
             [Array]::Copy($ByteArray, $StartIndex, $array, 0, $ByteCount)
-            
+
             ,$array
             break
         }
@@ -1558,7 +1555,7 @@ function Convert-PSCredentialToPinnedByteArray
                 $script:PSCredentialHeader, 0, $pinnedArray.Array, $destIndex, $script:PSCredentialHeader.Count
             )
             $destIndex += $script:PSCredentialHeader.Count
-        
+
             [Array]::Copy($sizeBytes, 0, $pinnedArray.Array, $destIndex, $sizeBytes.Count)
             $destIndex += $sizeBytes.Count
 
