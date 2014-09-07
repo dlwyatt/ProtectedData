@@ -54,7 +54,10 @@ function New-TestCertificate
         $NotBefore,
 
         [Nullable[DateTime]]
-        $NotAfter
+        $NotAfter,
+
+        [switch]
+        $CngProvider
     )
 
     if ($null -eq $NotBefore)
@@ -78,21 +81,25 @@ function New-TestCertificate
     $requestfile = [System.IO.Path]::GetTempFileName()
     $certFile = [System.IO.Path]::GetTempFileName()
 
+    if ($CngProvider)
+    {
+        $providerName = 'Microsoft Software Key Storage Provider'
+    }
+    else
+    {
+        $providerName = 'Microsoft RSA SChannel Cryptographic Provider'
+    }
+
     Set-Content -Path $requestfile -Encoding Ascii -Value @"
 [Version]
-
 Signature="`$Windows NT`$"
 
 [NewRequest]
-
 Subject = "$Subject"
 KeyLength = 2048
-; Can be 2048, 4096, 8192, or 16384.
-; Larger key sizes are more secure, but have
-; a greater impact on performance.
 Exportable = TRUE
 FriendlyName = "ProtectedData"
-ProviderName = "Microsoft RSA SChannel Cryptographic Provider"
+ProviderName = "$providerName"
 ProviderType = 12
 RequestType = Cert
 Silent = True
@@ -101,7 +108,6 @@ KeySpec = AT_KEYEXCHANGE
 KeyUsage = CERT_KEY_ENCIPHERMENT_KEY_USAGE
 NotBefore = "$notBeforeString"
 NotAfter = "$notAfterString"
-
 "@
 
     try
@@ -112,7 +118,7 @@ NotAfter = "$notAfterString"
             Select-Object -ExpandProperty Thumbprint
         )
 
-        $null = certreq -new -f -q $requestfile $certFile 2>&1
+        $null = certreq.exe -new -f -q $requestfile $certFile 2>&1
 
         $newCert = Get-ChildItem Cert:\CurrentUser\My -Exclude $oldCerts |
                    Where-Object { $_.Subject -eq $Subject } |
@@ -584,5 +590,19 @@ Describe 'Legacy Padding Support' {
             Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification |
             Should Be $stringToEncrypt
         }
+    }
+}
+
+Describe 'CNG Key Storage Provider' {
+    $testCert = New-TestCertificate -Subject $testCertificateSubject -CngProvider
+
+    $protectedData = Protect-Data -InputObject $stringToEncrypt -CertificateThumbprint $testCert -SkipCertificateVerification
+
+    It 'Decrypts data successfully using an RSA cert using a CNG KSP' {
+        { Unprotect-Data -InputObject $protectedData -CertificateThumbprint $testCert -SkipCertificateVerification }|
+        Should Not Throw
+
+        Unprotect-Data -InputObject $protectedData -CertificateThumbprint $testCert -SkipCertificateVerification |
+        Should Be $stringToEncrypt
     }
 }

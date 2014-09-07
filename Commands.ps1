@@ -1172,7 +1172,7 @@ function ValidateKeyEncryptionCertificate
 
             if ($null -eq $Certificate)
             {
-                Write-Error "Could not find private key for certificate '$($Certificate.Thumbprint)'."
+                Write-Error "Could not find private key for certificate '$($CertificateGroup[0].Thumbprint)'."
                 return
             }
         }
