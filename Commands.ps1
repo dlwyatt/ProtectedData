@@ -1025,12 +1025,9 @@ function Unprotect-MatchingKeyData
 
         if ($PSCmdlet.ParameterSetName -eq 'Certificate')
         {
-            $keyData =
-            $InputObject.KeyData |
-           Where-Object {
-               (Test-IsCertificateProtectedKeyData -InputObject $_) -and $_.Thumbprint -eq $Certificate.Thumbprint
-           } |
-           Select-Object -First 1
+            $keyData = $InputObject.KeyData |
+                       Where-Object { (Test-IsCertificateProtectedKeyData -InputObject $_) -and $_.Thumbprint -eq $Certificate.Thumbprint } |
+                       Select-Object -First 1
 
             if ($null -eq $keyData)
             {
