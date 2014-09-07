@@ -1041,12 +1041,8 @@ function Unprotect-MatchingKeyData
 
             try
             {
-                $key = New-Object PowerShellUtils.PinnedArray[byte](
-                    ,$Certificate.PrivateKey.Decrypt($keyData.Key, $useOAEP)
-                )
-                $iv = New-Object PowerShellUtils.PinnedArray[byte](
-                    ,$Certificate.PrivateKey.Decrypt($keyData.IV , $useOAEP)
-                )
+                $key = DecryptData -Certificate $Certificate -CipherText $keyData.Key -UseOaepPadding:$useOAEP
+                $iv = DecryptData -Certificate $Certificate -CipherText $keyData.IV -UseOaepPadding:$useOAEP
             }
             catch
             {
@@ -1097,6 +1093,44 @@ function Unprotect-MatchingKeyData
     }
 
 } # function Unprotect-MatchingKeyData
+
+function DecryptData([System.Security.Cryptography.X509Certificates.X509Certificate2] $Certificate,
+                     [byte[]] $CipherText,
+                     [switch] $UseOaepPadding)
+{
+    if ($Certificate.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider])
+    {
+        return New-Object PowerShellUtils.PinnedArray[byte](
+            ,$Certificate.PrivateKey.Decrypt($CipherText, $UseOaepPadding)
+        )
+    }
+
+    # By the time we get here, we've already validated that either the certificate has an RsaCryptoServiceProvider
+    # object in its PrivateKey property, or we can fetch an RSA CNG key.
+
+    $cngKey = $null
+    $cngRsa = $null
+    try
+    {
+        $cngKey = [Security.Cryptography.X509Certificates.X509Certificate2ExtensionMethods]::GetCngPrivateKey($Certificate)
+        $cngRsa = [Security.Cryptography.RSACng]$cngKey
+        $cngRsa.EncryptionHashAlgorithm = [System.Security.Cryptography.CngAlgorithm]::Sha1
+
+        if (-not $UseOaepPadding)
+        {
+            $cngRsa.EncryptionPaddingMode = [Security.Cryptography.AsymmetricPaddingMode]::Pkcs1
+        }
+
+        return New-Object PowerShellUtils.PinnedArray[byte](
+            ,$cngRsa.DecryptValue($CipherText)
+        )
+    }
+    finally
+    {
+        if ($cngKey -is [IDisposable]) { $cngKey.Dispose() }
+        if ($null -ne $cngRsa) { $cngRsa.Clear() }
+    }
+}
 
 function ValidateKeyEncryptionCertificate
 {
@@ -1154,7 +1188,7 @@ function ValidateKeyEncryptionCertificate
         if ($keyUsageFound -and ($keyUsageFlags -band $keyEncipherment) -ne $keyEncipherment)
         {
             Write-Error ("Certificate '$($Certificate.Thumbprint)' contains a Key Usage extension which does not" +
-                        "allow Key Encipherment.")
+                        'allow Key Encipherment.')
             return
         }
 
@@ -1167,7 +1201,7 @@ function ValidateKeyEncryptionCertificate
         if ($RequirePrivateKey)
         {
             $Certificate = $CertificateGroup |
-                           Where-Object { $_.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider] } |
+                           Where-Object { TestPrivateKey -Certificate $_ } |
                            Select-Object -First 1
 
             if ($null -eq $Certificate)
@@ -1182,6 +1216,30 @@ function ValidateKeyEncryptionCertificate
     } # process
 
 } # function ValidateKeyEncryptionCertificate
+
+function TestPrivateKey([System.Security.Cryptography.X509Certificates.X509Certificate2] $Certificate)
+{
+    if (-not $Certificate.HasPrivateKey) { return $false }
+    if ($Certificate.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider]) { return $true }
+
+    $cngKey = $null
+    try
+    {
+        if ([Security.Cryptography.X509Certificates.X509CertificateExtensionMethods]::HasCngKey($Certificate))
+        {
+            $cngKey = [Security.Cryptography.X509Certificates.X509Certificate2ExtensionMethods]::GetCngPrivateKey($Certificate)
+            return ($null -ne $cngKey -and $cngKey.AlgorithmGroup -eq [System.Security.Cryptography.CngAlgorithmGroup]::Rsa)
+        }
+    }
+    catch
+    {
+        return $false
+    }
+    finally
+    {
+        if ($cngKey -is [IDisposable]) { $cngKey.Dispose() }
+    }
+}
 
 function Get-KeyGenerator
 {

@@ -4,6 +4,12 @@ Set-StrictMode -Version Latest
 
 $scriptRoot = Split-Path $MyInvocation.MyCommand.Path -Parent
 
+$moduleManifest = Join-Path -Path $scriptRoot -ChildPath ProtectedData.psd1
+
+# Neat wildcard trick for removing a module if it's loaded, without producing errors if it's not.
+Remove-Module [P]rotectedData
+Import-Module $moduleManifest -Force -ErrorAction Stop
+
 $stringToEncrypt = 'This is my string.'
 $secureStringToEncrypt = $stringToEncrypt | ConvertTo-SecureString -AsPlainText -Force
 
@@ -151,13 +157,6 @@ function Remove-TestCertificate
         }
 
         $store.Close()
-    }
-}
-
-Describe 'Module Load' {
-    It 'Loads the module without errors' {
-        $moduleManifest = Join-Path -Path $scriptRoot -ChildPath ProtectedData.psd1
-        { Import-Module $moduleManifest -Force -ErrorAction Stop } | Should Not Throw
     }
 }
 
