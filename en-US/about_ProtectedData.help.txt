@@ -82,12 +82,6 @@ SHORT DESCRIPTION
       allows you to leverage self-signed certificates, etc, if you don't care about
       validating a trust chain and just want to get at the RSA key pair.
 
-      Unfortunately, the current version of the .NET Framework doesn't handle Crypto
-      Next Generation (CNG) certificates very well, even if they happen to be RSA
-      certs.  You won't be able to access the private key of a certificate which
-      uses a CNG key storage provider.  (These will typically be based on "Version 3"
-      certificate templates which have selected "Microsoft Software Key Storage Provider".)
-
       You can verify which of your certificates are usable for both encryption and
       decryption ahead of time by running the following command:
 
