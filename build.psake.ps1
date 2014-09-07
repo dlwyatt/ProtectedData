@@ -1,8 +1,8 @@
-Task default -depends Build, Sign
+Task default -depends Build
 
 Properties {
     $source = $psake.build_script_dir
-    $buildTarget = "~\Documents\WindowsPowerShell\Modules\ProtectedData"
+    $buildTarget = '~\Documents\WindowsPowerShell\Modules\ProtectedData'
 
     $filesToExclude = @(
         'README.md'
@@ -37,7 +37,7 @@ Task Build -depends Test {
     Copy-Item -Path $source\* -Exclude $filesToExclude -Destination $buildTarget -Recurse -ErrorAction Stop
 }
 
-Task Sign -depends Build {
+Task Sign {
     $CertThumbprint = 'A2E6B086AC438B5480365B2D5E48BB25F9BE69B3'
     $TimestampURL   = 'http://timestamp.digicert.com'
 
@@ -54,7 +54,7 @@ Task Sign -depends Build {
         @{ Label = 'TimeStamperCertificate'; Expression = { $_.TimeStamperCertificate.Thumbprint } }
     )
 
-    Get-ChildItem -Path $buildTarget\* -Include *.ps1, *.psm1, *.psd1 |
+    Get-ChildItem -Path $buildTarget\* -Include *.ps1, *.psm1, *.psd1, *.dll |
     Set-AuthenticodeSignature -Certificate $cert -TimestampServer $TimestampURL -Force -IncludeChain All -ErrorAction Stop |
     Format-Table -Property $properties -AutoSize
 }
