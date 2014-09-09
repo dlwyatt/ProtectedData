@@ -1516,21 +1516,24 @@ function ConvertTo-PinnedByteArray
 
     try
     {
-        switch ($InputObject.GetType())
+        switch ($InputObject.GetType().FullName)
         {
-            ([string])
+            ([string].FullName)
             {
                 $pinnedArray = Convert-StringToPinnedByteArray -String $InputObject
+                break
             }
 
-            ([System.Security.SecureString])
+            ([System.Security.SecureString].FullName)
             {
                 $pinnedArray = Convert-SecureStringToPinnedByteArray -SecureString $InputObject
+                break
             }
 
-            ([System.Management.Automation.PSCredential])
+            ([System.Management.Automation.PSCredential].FullName)
             {
                 $pinnedArray = Convert-PSCredentialToPinnedByteArray -Credential $InputObject
+                break
             }
 
             default
@@ -1597,27 +1600,27 @@ function ConvertFrom-ByteArray
         throw 'The specified index and count values exceed the bounds of the array.'
     }
 
-    switch ($Type)
+    switch ($Type.FullName)
     {
-        ([string])
+        ([string].FullName)
         {
             Convert-ByteArrayToString -ByteArray $ByteArray -StartIndex $StartIndex -ByteCount $ByteCount
             break
         }
 
-        ([System.Security.SecureString])
+        ([System.Security.SecureString].FullName)
         {
             Convert-ByteArrayToSecureString -ByteArray $ByteArray -StartIndex $StartIndex -ByteCount $ByteCount
             break
         }
 
-        ([System.Management.Automation.PSCredential])
+        ([System.Management.Automation.PSCredential].FullName)
         {
             Convert-ByteArrayToPSCredential -ByteArray $ByteArray -StartIndex $StartIndex -ByteCount $ByteCount
             break
         }
 
-        ([byte[]])
+        ([byte[]].FullName)
         {
             $array = New-Object byte[]($ByteCount)
             [Array]::Copy($ByteArray, $StartIndex, $array, 0, $ByteCount)
