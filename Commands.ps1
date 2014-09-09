@@ -16,20 +16,22 @@ $script:ValidTypes = @(
 
 $script:PSCredentialHeader = [byte[]](5,12,19,75,80,20,19,11,11,6,11,13)
 
+$script:EccAlgorithmOid = '1.2.840.10045.2.1'
+
 #region Exported functions
 
 function Protect-Data
 {
     <#
     .Synopsis
-       Encrypts an object using one or more RSA certificates and/or passwords.
+       Encrypts an object using one or more digital certificates and/or passwords.
     .DESCRIPTION
-       Encrypts an object using a randomly-generated AES key. AES key information is encrypted using one or more RSA public keys and/or password-derived keys, allowing the data to be securely shared among multiple users and computers.
+       Encrypts an object using a randomly-generated AES key. AES key information is encrypted using one or more certificate public keys and/or password-derived keys, allowing the data to be securely shared among multiple users and computers.
        If certificates are used, they must be installed in either the local computer or local user's certificate stores, and the certificates' Key Usage extension (if present) must allow Key Encipherment. The private keys are not required for Protect-Data.
     .PARAMETER InputObject
        The object that is to be encrypted. The object must be of one of the types returned by the Get-ProtectedDataSupportedTypes command.
     .PARAMETER CertificateThumbprint
-       Zero or more certificate thumbprints that should be used to encrypt the data. The certificates must be installed in the local computer or current user's certificate stores, and must be RSA certificates. The data can later be decrypted by using the same certificate (with its private key.)
+       Zero or more certificate thumbprints that should be used to encrypt the data. The certificates must be installed in the local computer or current user's certificate stores, and must be RSA or ECDH certificates. The data can later be decrypted by using the same certificate (with its private key.)
     .PARAMETER Certificate
        Zero or more X509Certificate2 objects that should be used to encrypt the data.  Using this parameter instead of CertificateThumbprint can offer more flexibility, as the certificate may be loaded from a file instead of being installed in a certificate store.
     .PARAMETER UseLegacyPadding
@@ -45,11 +47,11 @@ function Protect-Data
     .EXAMPLE
        $encryptedObject = Protect-Data -InputObject $myString -CertificateThumbprint CB04E7C885BEAE441B39BC843C85855D97785D25 -Password (Read-Host -AsSecureString -Prompt 'Enter password to encrypt')
 
-       Encrypts a string using a single RSA certificate, and a password. Either the certificate or the password can be used when decrypting the data.
+       Encrypts a string using a single RSA or ECDH certificate, and a password. Either the certificate or the password can be used when decrypting the data.
     .EXAMPLE
        $credential | Protect-Data -CertificateThumbprint 'CB04E7C885BEAE441B39BC843C85855D97785D25', 'B5A04AB031C24BCEE220D6F9F99B6F5D376753FB'
 
-       Encrypts a PSCredential object using two RSA certificates. Either private key can be used to later decrypt the data.
+       Encrypts a PSCredential object using two RSA or ECDH certificates. Either private key can be used to later decrypt the data.
     .INPUTS
        Object
 
@@ -170,36 +172,23 @@ function Protect-Data
     process
     {
         $plainText = $null
-        $aes = $null
-        $key = $null
-        $iv = $null
+        $payload = $null
 
         try
         {
             $plainText = ConvertTo-PinnedByteArray -InputObject $InputObject
-
-            $aes = New-Object System.Security.Cryptography.AesCryptoServiceProvider
-            $key = New-Object PowerShellUtils.PinnedArray[byte](,$aes.Key)
-            $iv = New-Object PowerShellUtils.PinnedArray[byte](,$aes.IV)
-
-            $memoryStream = New-Object System.IO.MemoryStream
-            $cryptoStream = New-Object System.Security.Cryptography.CryptoStream(
-                $memoryStream, $aes.CreateEncryptor(), 'Write'
-            )
-
-            $cryptoStream.Write($plainText, 0, $plainText.Count)
-            $cryptoStream.FlushFinalBlock()
+            $payload = Protect-DataWithAes -PlainText $plainText
 
             $protectedData = New-Object psobject -Property @{
-                CipherText = $memoryStream.ToArray()
+                CipherText = $payload.CipherText
                 Type = $InputObject.GetType().FullName
                 KeyData = @()
             }
 
             $params = @{
                 InputObject = $protectedData
-                Key = $key
-                IV = $iv
+                Key = $payload.Key
+                IV = $payload.IV
                 Certificate = $certs
                 Password = $Password
                 PasswordIterationCount = $PasswordIterationCount
@@ -220,12 +209,12 @@ function Protect-Data
         }
         finally
         {
-            if ($null -ne $aes) { $aes.Clear() }
-            if ($cryptoStream -is [IDisposable]) { $cryptoStream.Dispose() }
-            if ($memoryStream -is [IDisposable]) { $memoryStream.Dispose() }
             if ($plainText -is [IDisposable]) { $plainText.Dispose() }
-            if ($key -is [IDisposable]) { $key.Dispose() }
-            if ($iv -is [IDisposable]) { $iv.Dispose() }
+            if ($null -ne $payload)
+            {
+                if ($payload.Key -is [IDisposable]) { $payload.Key.Dispose() }
+                if ($payload.IV -is [IDisposable]) { $payload.IV.Dispose() }
+            }
         }
 
     } # process
@@ -242,7 +231,7 @@ function Unprotect-Data
     .PARAMETER InputObject
        The ProtectedData object that is to be decrypted.
     .PARAMETER CertificateThumbprint
-       Thumbprint of an RSA certificate that will be used to decrypt the data. This certificate must be present in either the local computer or current user's certificate stores, and the current user must have permission to use the certificate's private key. One of the InputObject's KeyData objects must be protected with this certificate.
+       Thumbprint of an RSA or ECDH certificate that will be used to decrypt the data. This certificate must be present in either the local computer or current user's certificate stores, and the current user must have permission to use the certificate's private key. One of the InputObject's KeyData objects must be protected with this certificate.
     .PARAMETER Certificate
        An X509Certificate2 object that should be used to decrypt the data.  Using this parameter instead of CertificateThumbprint can offer more flexibility, as the certificate may be loaded from a file instead of being installed in a certificate store.  One of the InputObject's KeyData objects must be protected with this certificate.
     .PARAMETER Password
@@ -389,24 +378,9 @@ function Unprotect-Data
             $key = $result.Key
             $iv = $result.IV
 
-            $aes = New-Object System.Security.Cryptography.AesCryptoServiceProvider -Property @{
-                Key = $key
-                IV = $iv
-            }
+            $plainText = (Unprotect-DataWithAes -CipherText $InputObject.CipherText -Key $key -IV $iv).PlainText
 
-            # Not sure exactly how long of a buffer we'll need to hold the decrypted data. Twice
-            # the ciphertext length should be more than enough.
-            $plainText = New-Object PowerShellUtils.PinnedArray[byte](2 * $InputObject.CipherText.Count)
-
-            $memoryStream = New-Object System.IO.MemoryStream(,$plainText)
-            $cryptoStream = New-Object System.Security.Cryptography.CryptoStream(
-                $memoryStream, $aes.CreateDecryptor(), 'Write'
-            )
-
-            $cryptoStream.Write($InputObject.CipherText, 0, $InputObject.CipherText.Count)
-            $cryptoStream.FlushFinalBlock()
-
-            ConvertFrom-ByteArray -ByteArray $plainText -Type $InputObject.Type -ByteCount $memoryStream.Position
+            ConvertFrom-ByteArray -ByteArray $plainText -Type $InputObject.Type -ByteCount $plainText.Count
         }
         catch
         {
@@ -415,9 +389,6 @@ function Unprotect-Data
         }
         finally
         {
-            if ($null -ne $aes) { $aes.Clear() }
-            if ($cryptoStream -is [IDisposable]) { $cryptoStream.Dispose() }
-            if ($memoryStream -is [IDisposable]) { $memoryStream.Dispose() }
             if ($plainText -is [IDisposable]) { $plainText.Dispose() }
             if ($key -is [IDisposable]) { $key.Dispose() }
             if ($iv -is [IDisposable]) { $iv.Dispose() }
@@ -443,7 +414,7 @@ function Add-ProtectedDataCredential
     .PARAMETER Password
        A password which was previously used to encrypt the ProtectedData structure's key.
     .PARAMETER NewCertificateThumbprint
-       Zero or more certificate thumbprints that should be used to encrypt the data. The certificates must be installed in the local computer or current user's certificate stores, and must be RSA certificates. The data can later be decrypted by using the same certificate (with its private key.)
+       Zero or more certificate thumbprints that should be used to encrypt the data. The certificates must be installed in the local computer or current user's certificate stores, and must be RSA or ECDH certificates. The data can later be decrypted by using the same certificate (with its private key.)
     .PARAMETER NewCertificate
        Zero or more X509Certificate2 objects that should be used to encrypt the data.  Using this parameter instead of CertificateThumbprint can offer more flexibility, as the certificate may be loaded from a file instead of being installed in a certificate store.
     .PARAMETER UseLegacyPadding
@@ -911,6 +882,122 @@ function Get-KeyEncryptionCertificate
 
 #region Helper functions
 
+function Protect-DataWithAes
+{
+    [CmdletBinding(DefaultParameterSetName = 'KnownKey')]
+    param (
+        [Parameter(Mandatory = $true)]
+        [byte[]]
+        $PlainText,
+
+        [byte[]]
+        $Key,
+
+        [byte[]]
+        $IV
+    )
+
+    $aes = $null
+    $memoryStream = $null
+    $cryptoStream = $null
+
+    try
+    {
+        $aes = New-Object System.Security.Cryptography.AesCryptoServiceProvider
+
+        if ($null -ne $Key) { $aes.Key = $Key }
+        if ($null -ne $IV) { $aes.IV = $IV }
+
+        $memoryStream = New-Object System.IO.MemoryStream
+        $cryptoStream = New-Object System.Security.Cryptography.CryptoStream(
+            $memoryStream, $aes.CreateEncryptor(), 'Write'
+        )
+
+        $cryptoStream.Write($PlainText, 0, $PlainText.Count)
+        $cryptoStream.FlushFinalBlock()
+
+
+        $properties = @{
+            CipherText = $memoryStream.ToArray()
+        }
+
+        if ($null -eq $Key)
+        {
+            $properties['Key'] = New-Object PowerShellUtils.PinnedArray[byte](,$aes.Key)
+        }
+
+        if ($null -eq $IV)
+        {
+            $properties['IV'] = New-Object PowerShellUtils.PinnedArray[byte](,$aes.IV)
+        }
+
+        New-Object psobject -Property $properties
+    }
+    finally
+    {
+        if ($null -ne $aes) { $aes.Clear() }
+        if ($cryptoStream -is [IDisposable]) { $cryptoStream.Dispose() }
+        if ($memoryStream -is [IDisposable]) { $memoryStream.Dispose() }
+    }
+}
+
+function Unprotect-DataWithAes
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [byte[]]
+        $CipherText,
+
+        [Parameter(Mandatory = $true)]
+        [byte[]]
+        $Key,
+
+        [Parameter(Mandatory = $true)]
+        [byte[]]
+        $IV
+    )
+
+    $aes = $null
+    $memoryStream = $null
+    $cryptoStream = $null
+    $buffer = $null
+
+    try
+    {
+        $aes = New-Object System.Security.Cryptography.AesCryptoServiceProvider -Property @{
+            Key = $Key
+            IV = $IV
+        }
+
+        # Not sure exactly how long of a buffer we'll need to hold the decrypted data. Twice
+        # the ciphertext length should be more than enough.
+        $buffer = New-Object PowerShellUtils.PinnedArray[byte](2 * $CipherText.Count)
+
+        $memoryStream = New-Object System.IO.MemoryStream(,$buffer)
+        $cryptoStream = New-Object System.Security.Cryptography.CryptoStream(
+            $memoryStream, $aes.CreateDecryptor(), 'Write'
+        )
+
+        $cryptoStream.Write($CipherText, 0, $CipherText.Count)
+        $cryptoStream.FlushFinalBlock()
+
+        $plainText = New-Object PowerShellUtils.PinnedArray[byte]($memoryStream.Position)
+        [Array]::Copy($buffer.Array, $plainText.Array, $memoryStream.Position)
+
+        return New-Object psobject -Property @{
+            PlainText = $plainText
+        }
+    }
+    finally
+    {
+        if ($null -ne $aes) { $aes.Clear() }
+        if ($cryptoStream -is [IDisposable]) { $cryptoStream.Dispose() }
+        if ($memoryStream -is [IDisposable]) { $memoryStream.Dispose() }
+        if ($buffer -is [IDisposable]) { $buffer.Dispose() }
+    }
+}
+
 function Add-KeyData
 {
     [CmdletBinding()]
@@ -958,20 +1045,7 @@ function Add-KeyData
                      Where-Object { $_.Thumbprint -eq $cert.Thumbprint }
 
             if ($null -ne $match) { continue }
-
-            try
-            {
-                New-Object psobject -Property @{
-                    Key = $cert.PublicKey.Key.Encrypt($key, $useOAEP)
-                    IV = $cert.PublicKey.Key.Encrypt($iv , $useOAEP)
-                    Thumbprint = $cert.Thumbprint
-                    LegacyPadding = [bool] $UseLegacyPadding
-                }
-            }
-            catch
-            {
-                Write-Error -ErrorRecord $_
-            }
+            Protect-KeyDataWithCertificate -Certificate $cert -Key $Key -IV $IV -UseLegacyPadding:$UseLegacyPadding
         }
 
         foreach ($secureString in $Password)
@@ -988,15 +1062,7 @@ function Add-KeyData
                      }
 
             if ($null -ne $match) { continue }
-
-            $params = @{
-                Password = $secureString
-                Key = $key
-                IV = $iv
-                IterationCount = $PasswordIterationCount
-            }
-
-            Protect-KeyDataWithPassword @params
+            Protect-KeyDataWithPassword -Password $secureString -Key $Key -IV $IV -IterationCount $PasswordIterationCount
         }
     )
 
@@ -1018,116 +1084,52 @@ function Unprotect-MatchingKeyData
         $Password
     )
 
-    $doFinallyBlock = $true
-
-    try
+    if ($PSCmdlet.ParameterSetName -eq 'Certificate')
     {
+        $keyData = $InputObject.KeyData |
+                    Where-Object { (Test-IsCertificateProtectedKeyData -InputObject $_) -and $_.Thumbprint -eq $Certificate.Thumbprint } |
+                    Select-Object -First 1
 
-        if ($PSCmdlet.ParameterSetName -eq 'Certificate')
+        if ($null -eq $keyData)
         {
-            $keyData = $InputObject.KeyData |
-                       Where-Object { (Test-IsCertificateProtectedKeyData -InputObject $_) -and $_.Thumbprint -eq $Certificate.Thumbprint } |
-                       Select-Object -First 1
-
-            if ($null -eq $keyData)
-            {
-                throw "Protected data object was not encrypted with certificate '$($Certificate.Thumbprint)'."
-            }
-
-            $useOAEP = -not $keyData.LegacyPadding
-
-            try
-            {
-                $key = DecryptData -Certificate $Certificate -CipherText $keyData.Key -UseOaepPadding:$useOAEP
-                $iv = DecryptData -Certificate $Certificate -CipherText $keyData.IV -UseOaepPadding:$useOAEP
-            }
-            catch
-            {
-                throw
-            }
-        }
-        else
-        {
-            $keyData =
-            $InputObject.KeyData |
-            Where-Object {
-                (Test-IsPasswordProtectedKeyData -InputObject $_) -and
-                $_.Hash -eq (Get-PasswordHash -Password $Password -Salt $_.HashSalt -IterationCount $_.IterationCount)
-            } |
-            Select-Object -First 1
-
-            if ($null -eq $keyData)
-            {
-                throw 'Protected data object was not encrypted with the specified password.'
-            }
-
-            try
-            {
-                $result = Unprotect-KeyDataWithPassword -KeyData $keyData -Password $Password
-                $key = $result.Key
-                $iv = $result.IV
-            }
-            catch
-            {
-                throw
-            }
+            throw "Protected data object was not encrypted with certificate '$($Certificate.Thumbprint)'."
         }
 
-        $doFinallyBlock = $false
-
-        New-Object psobject -Property @{
-            Key = $key
-            IV = $iv
+        try
+        {
+            return Unprotect-KeyDataWithCertificate -KeyData $keyData -Certificate $Certificate
+        }
+        catch
+        {
+            throw
         }
     }
-    finally
+    else
     {
-        if ($doFinallyBlock)
+        $keyData =
+        $InputObject.KeyData |
+        Where-Object {
+            (Test-IsPasswordProtectedKeyData -InputObject $_) -and
+            $_.Hash -eq (Get-PasswordHash -Password $Password -Salt $_.HashSalt -IterationCount $_.IterationCount)
+        } |
+        Select-Object -First 1
+
+        if ($null -eq $keyData)
         {
-            if ($key -is [IDisposable]) { $key.Dispose() }
-            if ($iv -is [IDisposable]) { $iv.Dispose() }
+            throw 'Protected data object was not encrypted with the specified password.'
+        }
+
+        try
+        {
+            return Unprotect-KeyDataWithPassword -KeyData $keyData -Password $Password
+        }
+        catch
+        {
+            throw
         }
     }
 
 } # function Unprotect-MatchingKeyData
-
-function DecryptData([System.Security.Cryptography.X509Certificates.X509Certificate2] $Certificate,
-                     [byte[]] $CipherText,
-                     [switch] $UseOaepPadding)
-{
-    if ($Certificate.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider])
-    {
-        return New-Object PowerShellUtils.PinnedArray[byte](
-            ,$Certificate.PrivateKey.Decrypt($CipherText, $UseOaepPadding)
-        )
-    }
-
-    # By the time we get here, we've already validated that either the certificate has an RsaCryptoServiceProvider
-    # object in its PrivateKey property, or we can fetch an RSA CNG key.
-
-    $cngKey = $null
-    $cngRsa = $null
-    try
-    {
-        $cngKey = [Security.Cryptography.X509Certificates.X509Certificate2ExtensionMethods]::GetCngPrivateKey($Certificate)
-        $cngRsa = [Security.Cryptography.RSACng]$cngKey
-        $cngRsa.EncryptionHashAlgorithm = [System.Security.Cryptography.CngAlgorithm]::Sha1
-
-        if (-not $UseOaepPadding)
-        {
-            $cngRsa.EncryptionPaddingMode = [Security.Cryptography.AsymmetricPaddingMode]::Pkcs1
-        }
-
-        return New-Object PowerShellUtils.PinnedArray[byte](
-            ,$cngRsa.DecryptValue($CipherText)
-        )
-    }
-    finally
-    {
-        if ($cngKey -is [IDisposable]) { $cngKey.Dispose() }
-        if ($null -ne $cngRsa) { $cngRsa.Clear() }
-    }
-}
 
 function ValidateKeyEncryptionCertificate
 {
@@ -1148,9 +1150,12 @@ function ValidateKeyEncryptionCertificate
     {
         $Certificate = $CertificateGroup[0]
 
-        if ($Certificate.PublicKey.Key -isnot [System.Security.Cryptography.RSACryptoServiceProvider])
+        $isEccCertificate = $Certificate.GetKeyAlgorithm() -eq $script:EccAlgorithmOid
+
+        if ($Certificate.PublicKey.Key -isnot [System.Security.Cryptography.RSACryptoServiceProvider] -and
+            -not $isEccCertificate)
         {
-            Write-Error "Certficiate '$($Certificate.Thumbprint)' is not an RSA certificate."
+            Write-Error "Certficiate '$($Certificate.Thumbprint)' is not an RSA or ECDH certificate."
             return
         }
 
@@ -1169,8 +1174,16 @@ function ValidateKeyEncryptionCertificate
             }
         }
 
+        if ($isEccCertificate)
+        {
+            $neededKeyUsage = [System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::KeyAgreement
+        }
+        else
+        {
+            $neededKeyUsage = [System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::KeyEncipherment
+        }
+
         $keyUsageFound = $false
-        $keyEncipherment = [System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::KeyEncipherment
         $keyUsageFlags = 0
 
         foreach ($extension in $Certificate.Extensions)
@@ -1182,10 +1195,10 @@ function ValidateKeyEncryptionCertificate
             }
         }
 
-        if ($keyUsageFound -and ($keyUsageFlags -band $keyEncipherment) -ne $keyEncipherment)
+        if ($keyUsageFound -and ($keyUsageFlags -band $neededKeyUsage) -ne $neededKeyUsage)
         {
             Write-Error ("Certificate '$($Certificate.Thumbprint)' contains a Key Usage extension which does not" +
-                        'allow Key Encipherment.')
+                        "allow $($neededKeyUsage.ToString()).")
             return
         }
 
@@ -1225,7 +1238,9 @@ function TestPrivateKey([System.Security.Cryptography.X509Certificates.X509Certi
         if ([Security.Cryptography.X509Certificates.X509CertificateExtensionMethods]::HasCngKey($Certificate))
         {
             $cngKey = [Security.Cryptography.X509Certificates.X509Certificate2ExtensionMethods]::GetCngPrivateKey($Certificate)
-            return ($null -ne $cngKey -and $cngKey.AlgorithmGroup -eq [System.Security.Cryptography.CngAlgorithmGroup]::Rsa)
+            return $null -ne $cngKey -and
+                   ($cngKey.AlgorithmGroup -eq [System.Security.Cryptography.CngAlgorithmGroup]::Rsa -or
+                    $cngKey.AlgorithmGroup -eq [System.Security.Cryptography.CngAlgorithmGroup]::ECDiffieHellman)
         }
     }
     catch
@@ -1338,6 +1353,367 @@ function Get-RandomBytes
     }
 
 } # function Get-RandomBytes
+
+function Protect-KeyDataWithCertificate
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        $Certificate,
+
+        [byte[]]
+        $Key,
+
+        [byte[]]
+        $IV,
+
+        [switch] $UseLegacyPadding
+    )
+
+    if ($Certificate.PublicKey.Key -is [System.Security.Cryptography.RSACryptoServiceProvider])
+    {
+        Protect-KeyDataWithRsaCertificate -Certificate $Certificate -Key $Key -IV $IV -UseLegacyPadding:$UseLegacyPadding
+    }
+    elseif ($Certificate.GetKeyAlgorithm() -eq $script:EccAlgorithmOid)
+    {
+        Protect-KeyDataWithEcdhCertificate -Certificate $Certificate -Key $Key -IV $IV
+    }
+}
+
+function Protect-KeyDataWithRsaCertificate
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        $Certificate,
+
+        [byte[]]
+        $Key,
+
+        [byte[]]
+        $IV,
+
+        [switch] $UseLegacyPadding
+    )
+
+    $useOAEP = -not $UseLegacyPadding
+
+    try
+    {
+        New-Object psobject -Property @{
+            Key = $Certificate.PublicKey.Key.Encrypt($key, $useOAEP)
+            IV = $Certificate.PublicKey.Key.Encrypt($iv, $useOAEP)
+            Thumbprint = $Certificate.Thumbprint
+            LegacyPadding = [bool] $UseLegacyPadding
+        }
+    }
+    catch
+    {
+        Write-Error -ErrorRecord $_
+    }
+}
+
+function Protect-KeyDataWithEcdhCertificate
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        $Certificate,
+
+        [byte[]]
+        $Key,
+
+        [byte[]]
+        $IV
+    )
+
+    $publicKey = $null
+    $ephemeralKey = $null
+    $ecdh = $null
+    $derivedKey = $null
+
+    try
+    {
+        $publicKey = Get-EcdhPublicKey -Certificate $cert
+
+        $ephemeralKey = [System.Security.Cryptography.CngKey]::Create($publicKey.Algorithm)
+        $ecdh = [System.Security.Cryptography.ECDiffieHellmanCng]$ephemeralKey
+
+        $derivedKey = New-Object PowerShellUtils.PinnedArray[byte](
+            ,($ecdh.DeriveKeyMaterial($publicKey) | Select-Object -First 32)
+        )
+
+        if ($derivedKey.Count -ne 32)
+        {
+            # This shouldn't happen, but just in case...
+            throw "Error:  Key material derived from ECDH certificate $($Certificate.Thumbprint) was less than the required 32 bytes"
+        }
+
+        $ecdhIv = Get-RandomBytes -Count 16
+
+        $encryptedKey = Protect-DataWithAes -PlainText $Key -Key $derivedKey -IV $ecdhIv
+        $encryptedIv  = Protect-DataWithAes -PlainText $IV -Key $derivedKey -IV $ecdhIv
+
+        New-Object psobject @{
+            Key = $encryptedKey.CipherText
+            IV = $encryptedIv.CipherText
+            EcdhPublicKey = $ecdh.PublicKey.ToByteArray()
+            EcdhIV = $ecdhIv
+            Thumbprint = $Certificate.Thumbprint
+        }
+    }
+    finally
+    {
+        if ($publicKey -is [IDisposable]) { $publicKey.Dispose() }
+        if ($ephemeralKey -is [IDisposable]) { $ephemeralKey.Dispose() }
+        if ($null -ne $ecdh) { $ecdh.Clear() }
+        if ($derivedKey -is [IDisposable]) { $derivedKey.Dispose() }
+    }
+}
+
+function Get-EcdhPublicKey([System.Security.Cryptography.X509Certificates.X509Certificate2] $Certificate)
+{
+    # If we get here, we've already verified that the certificate has the Key Agreement usage extension,
+    # and that it is an ECC algorithm cert, meaning we can treat the OIDs as ECDH algorithms.  (These OIDs
+    # are shared with ECDSA, for some reason, and the ECDSA magic constants are different.)
+
+    $magic = @{
+        '1.2.840.10045.3.1.7' = [uint32]0x314B4345L # BCRYPT_ECDH_PUBLIC_P256_MAGIC
+        '1.3.132.0.34'        = [uint32]0x334B4345L # BCRYPT_ECDH_PUBLIC_P384_MAGIC
+        '1.3.132.0.35'        = [uint32]0x354B4345L # BCRYPT_ECDH_PUBLIC_P521_MAGIC
+    }
+
+    $algorithm = Get-AlgorithmOid -Certificate $Certificate
+
+    if (-not $magic.ContainsKey($algorithm))
+    {
+        throw "Certificate '$($Certificate.Thumbprint)' returned an unknown Public Key Algorithm OID: '$algorithm'"
+    }
+
+    $size = (($cert.GetPublicKey().Count - 1) / 2)
+
+    $keyBlob = [byte[]]@(
+        [System.BitConverter]::GetBytes($magic[$algorithm])
+        [System.BitConverter]::GetBytes($size)
+        $cert.GetPublicKey() | Select-Object -Skip 1
+    )
+
+    return [System.Security.Cryptography.CngKey]::Import($keyBlob, [System.Security.Cryptography.CngKeyBlobFormat]::EccPublicBlob)
+}
+
+
+function Get-AlgorithmOid([System.Security.Cryptography.X509Certificates.X509Certificate] $Certificate)
+{
+    $algorithmOid = $Certificate.GetKeyAlgorithm();
+
+    if ($algorithmOid -eq $script:EccAlgorithmOid)
+    {
+        $algorithmOid = DecodeBinaryOid -Bytes $Certificate.GetKeyAlgorithmParameters()
+    }
+
+    return $algorithmOid
+}
+
+function DecodeBinaryOid([byte[]] $Bytes)
+{
+    # Thanks to Vadims Podans (http://sysadmins.lv/) for this cool technique to take a byte array
+    # and decode the OID without having to use P/Invoke to call the CryptDecodeObject function directly.
+
+    [byte[]] $ekuBlob = @(
+        48
+        $Bytes.Count
+        $Bytes
+    )
+
+    $asnEncodedData = New-Object System.Security.Cryptography.AsnEncodedData(,$ekuBlob)
+    $enhancedKeyUsage = New-Object System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension($asnEncodedData, $false)
+
+    return $enhancedKeyUsage.EnhancedKeyUsages[0].Value
+}
+
+function Unprotect-KeyDataWithCertificate
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        $KeyData,
+
+        [Parameter(Mandatory = $true)]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        $Certificate
+    )
+
+    if ($Certificate.PublicKey.Key -is [System.Security.Cryptography.RSACryptoServiceProvider])
+    {
+        Unprotect-KeyDataWithRsaCertificate -KeyData $KeyData -Certificate $Certificate
+    }
+    elseif ($Certificate.GetKeyAlgorithm() -eq $script:EccAlgorithmOid)
+    {
+        Unprotect-KeyDataWithEcdhCertificate -KeyData $KeyData -Certificate $Certificate
+    }
+}
+
+function Unprotect-KeyDataWithEcdhCertificate
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        $KeyData,
+
+        [Parameter(Mandatory = $true)]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        $Certificate
+    )
+
+    $doFinallyBlock = $true
+    $key = $null
+    $iv = $null
+    $derivedKey = $null
+    $publicKey = $null
+    $privateKey = $null
+    $ecdh = $null
+
+    try
+    {
+        $privateKey = [Security.Cryptography.X509Certificates.X509Certificate2ExtensionMethods]::GetCngPrivateKey($Certificate)
+
+        if ($privateKey.AlgorithmGroup -ne [System.Security.Cryptography.CngAlgorithmGroup]::ECDiffieHellman)
+        {
+            throw "Certificate '$($Certificate.Thumbprint)' contains a non-ECDH key pair."
+        }
+
+        if ($null -eq $KeyData.EcdhPublicKey -or $null -eq $KeyData.EcdhIV)
+        {
+            throw "Certificate '$($Certificate.Thumbprint)' is a valid ECDH certificate, but the stored KeyData structure is missing the public key and/or IV used during encryption."
+        }
+
+        $publicKey = [System.Security.Cryptography.CngKey]::Import($KeyData.EcdhPublicKey, [System.Security.Cryptography.CngKeyBlobFormat]::EccPublicBlob)
+        $ecdh = [System.Security.Cryptography.ECDiffieHellmanCng]$privateKey
+
+        $derivedKey = New-Object PowerShellUtils.PinnedArray[byte](,($ecdh.DeriveKeyMaterial($publicKey) | Select-Object -First 32))
+        if ($derivedKey.Count -ne 32)
+        {
+            # This shouldn't happen, but just in case...
+            throw "Error:  Key material derived from ECDH certificate $($Certificate.Thumbprint) was less than the required 32 bytes"
+        }
+
+        $key = (Unprotect-DataWithAes -CipherText $KeyData.Key -Key $derivedKey.Array -IV $KeyData.EcdhIV).PlainText
+        $iv = (Unprotect-DataWithAes -CipherText $KeyData.IV -Key $derivedKey.Array -IV $KeyData.EcdhIV).PlainText
+
+        $doFinallyBlock = $false
+
+        return New-Object psobject -Property @{
+            Key = $key
+            IV = $iv
+        }
+    }
+    catch
+    {
+        throw
+    }
+    finally
+    {
+        if ($doFinallyBlock)
+        {
+            if ($key -is [IDisposable]) { $key.Dispose() }
+            if ($iv -is [IDisposable]) { $iv.Dispose() }
+        }
+
+        if ($derivedKey -is [IDisposable]) { $derivedKey.Dispose() }
+        if ($privateKey -is [IDisposable]) { $privateKey.Dispose() }
+        if ($publicKey -is [IDisposable]) { $publicKey.Dispose() }
+        if ($null -ne $ecdh) { $ecdh.Clear() }
+    }
+}
+
+function Unprotect-KeyDataWithRsaCertificate
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        $KeyData,
+
+        [Parameter(Mandatory = $true)]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        $Certificate
+    )
+
+    $useOAEP = -not $keyData.LegacyPadding
+
+    $key = $null
+    $iv = $null
+    $doFinallyBlock = $true
+
+    try
+    {
+        $key = DecryptRsaData -Certificate $Certificate -CipherText $keyData.Key -UseOaepPadding:$useOAEP
+        $iv = DecryptRsaData -Certificate $Certificate -CipherText $keyData.IV -UseOaepPadding:$useOAEP
+
+        $doFinallyBlock = $false
+
+        return New-Object psobject -Property @{
+            Key = $key
+            IV = $iv
+        }
+    }
+    catch
+    {
+        throw
+    }
+    finally
+    {
+        if ($doFinallyBlock)
+        {
+            if ($key -is [IDisposable]) { $key.Dispose() }
+            if ($iv -is [IDisposable]) { $iv.Dispose() }
+        }
+    }
+}
+
+function DecryptRsaData([System.Security.Cryptography.X509Certificates.X509Certificate2] $Certificate,
+                     [byte[]] $CipherText,
+                     [switch] $UseOaepPadding)
+{
+    if ($Certificate.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider])
+    {
+        return New-Object PowerShellUtils.PinnedArray[byte](
+            ,$Certificate.PrivateKey.Decrypt($CipherText, $UseOaepPadding)
+        )
+    }
+
+    # By the time we get here, we've already validated that either the certificate has an RsaCryptoServiceProvider
+    # object in its PrivateKey property, or we can fetch an RSA CNG key.
+
+    $cngKey = $null
+    $cngRsa = $null
+    try
+    {
+        $cngKey = [Security.Cryptography.X509Certificates.X509Certificate2ExtensionMethods]::GetCngPrivateKey($Certificate)
+        $cngRsa = [Security.Cryptography.RSACng]$cngKey
+        $cngRsa.EncryptionHashAlgorithm = [System.Security.Cryptography.CngAlgorithm]::Sha1
+
+        if (-not $UseOaepPadding)
+        {
+            $cngRsa.EncryptionPaddingMode = [Security.Cryptography.AsymmetricPaddingMode]::Pkcs1
+        }
+
+        return New-Object PowerShellUtils.PinnedArray[byte](
+            ,$cngRsa.DecryptValue($CipherText)
+        )
+    }
+    catch
+    {
+        throw
+    }
+    finally
+    {
+        if ($cngKey -is [IDisposable]) { $cngKey.Dispose() }
+        if ($null -ne $cngRsa) { $cngRsa.Clear() }
+    }
+}
 
 function Protect-KeyDataWithPassword
 {

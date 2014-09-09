@@ -7,6 +7,7 @@ Properties {
     $filesToExclude = @(
         'README.md'
         'ProtectedData.Tests.ps1'
+        'TestUtils.ps1'
         'build.cmd'
         'build.psake.ps1'
         'TestCertificateFile.pfx'

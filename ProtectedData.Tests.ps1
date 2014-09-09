@@ -3,8 +3,9 @@ Import-Module Pester -ErrorAction Stop
 Set-StrictMode -Version Latest
 
 $scriptRoot = Split-Path $MyInvocation.MyCommand.Path -Parent
-
 $moduleManifest = Join-Path -Path $scriptRoot -ChildPath ProtectedData.psd1
+
+. $scriptRoot\TestUtils.ps1
 
 # Neat wildcard trick for removing a module if it's loaded, without producing errors if it's not.
 Remove-Module [P]rotectedData
@@ -22,143 +23,6 @@ $passwordForEncryption = 'p@ssw0rd' | ConvertTo-SecureString -AsPlainText -Force
 $wrongPassword = 'wr0ngp@ssw0rd' | ConvertTo-SecureString -AsPlainText -Force
 
 $testCertificateSubject = 'CN=ProtectedData Test Certificate, OU=Unit Tests, O=ProtectedData, L=Somewhere, S=Ontario, C=CA'
-
-function Get-PlainTextFromSecureString
-{
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
-        [System.Security.SecureString]
-        $SecureString
-    )
-
-    process
-    {
-        $ptr = $null
-
-        try
-        {
-            $ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToGlobalAllocUnicode($SecureString)
-            [System.Runtime.InteropServices.Marshal]::PtrToStringUni($ptr)
-        }
-        finally
-        {
-            if ($null -ne $ptr) { [System.Runtime.InteropServices.Marshal]::ZeroFreeGlobalAllocUnicode($ptr) }
-        }
-    }
-}
-
-function New-TestCertificate
-{
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true)]
-        [string]
-        $Subject,
-
-        [Nullable[DateTime]]
-        $NotBefore,
-
-        [Nullable[DateTime]]
-        $NotAfter,
-
-        [switch]
-        $CngProvider
-    )
-
-    if ($null -eq $NotBefore)
-    {
-        $NotBefore = (Get-Date).AddDays(-7)
-    }
-
-    if ($null -eq $NotAfter)
-    {
-        $NotAfter = (Get-Date).AddDays(7)
-    }
-
-    if ($NotBefore -ge $NotAfter)
-    {
-        throw 'NotAfter date/time must take place after NotBefore'
-    }
-
-    $notBeforeString = $NotBefore.ToString('G')
-    $notAfterString = $NotAfter.ToString('G')
-
-    $requestfile = [System.IO.Path]::GetTempFileName()
-    $certFile = [System.IO.Path]::GetTempFileName()
-
-    if ($CngProvider)
-    {
-        $providerName = 'Microsoft Software Key Storage Provider'
-    }
-    else
-    {
-        $providerName = 'Microsoft RSA SChannel Cryptographic Provider'
-    }
-
-    Set-Content -Path $requestfile -Encoding Ascii -Value @"
-[Version]
-Signature="`$Windows NT`$"
-
-[NewRequest]
-Subject = "$Subject"
-KeyLength = 2048
-Exportable = TRUE
-FriendlyName = "ProtectedData"
-ProviderName = "$providerName"
-ProviderType = 12
-RequestType = Cert
-Silent = True
-SuppressDefaults = True
-KeySpec = AT_KEYEXCHANGE
-KeyUsage = CERT_KEY_ENCIPHERMENT_KEY_USAGE
-NotBefore = "$notBeforeString"
-NotAfter = "$notAfterString"
-"@
-
-    try
-    {
-        $oldCerts = @(
-            Get-ChildItem Cert:\CurrentUser\My |
-            Where-Object { $_.Subject -eq $Subject } |
-            Select-Object -ExpandProperty Thumbprint
-        )
-
-        $null = certreq.exe -new -f -q $requestfile $certFile 2>&1
-
-        $newCert = Get-ChildItem Cert:\CurrentUser\My -Exclude $oldCerts |
-                   Where-Object { $_.Subject -eq $Subject } |
-                   Select-Object -ExpandProperty Thumbprint
-
-        return $newCert
-    }
-    finally
-    {
-        Remove-Item -Path $requestfile -Force -ErrorAction SilentlyContinue
-        Remove-Item -Path $certFile -Force -ErrorAction SilentlyContinue
-    }
-}
-
-function Remove-TestCertificate
-{
-    $oldCerts = @(
-        Get-ChildItem Cert:\CurrentUser\My |
-        Where-Object { $_.Subject -eq $testCertificateSubject }
-    )
-
-    if ($oldCerts.Count -gt 0)
-    {
-        $store = Get-Item Cert:\CurrentUser\My
-        $store.Open('ReadWrite')
-
-        foreach ($oldCert in $oldCerts)
-        {
-            $store.Remove($oldCert)
-        }
-
-        $store.Close()
-    }
-}
 
 Describe 'Password-based encryption and decryption' {
     Context 'General Usage' {
@@ -347,80 +211,8 @@ Describe 'Certificate-based encryption and decryption (By thumbprint)' {
             { $null = Remove-ProtectedDataCredential -InputObject $protected -CertificateThumbprint $secondCertThumbprint } | Should Not Throw
         }
 
-        It 'No longer allows the data to be decrypted with the removed password' {
+        It 'No longer allows the data to be decrypted with the removed thumbprint' {
             { $null = Unprotect-Data -InputObject $protected -CertificateThumbprint $secondCertThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Throw
-        }
-    }
-
-    Context 'Protecting strings' {
-        $protectedData = $stringToEncrypt | Protect-Data -CertificateThumbprint $certThumbprint -SkipCertificateVerification
-        $decrypted = $protectedData | Unprotect-Data -CertificateThumbprint $certThumbprint -SkipCertificateVerification
-
-        It 'Does not return null' {
-            $decrypted | Should Not Be $null
-        }
-
-        It 'Returns a String object' {
-            $decrypted.GetType().FullName | Should Be System.String
-        }
-
-        It 'Decrypts the string properly.' {
-            $decrypted | Should Be $stringToEncrypt
-        }
-    }
-
-    Context 'Protecting SecureStrings' {
-        $protectedData = $secureStringToEncrypt | Protect-Data -CertificateThumbprint $certThumbprint -SkipCertificateVerification
-        $decrypted = $protectedData | Unprotect-Data -CertificateThumbprint $certThumbprint -SkipCertificateVerification
-
-        It 'Does not return null' {
-            $decrypted | Should Not Be $null
-        }
-
-        It 'Returns a SecureString object' {
-            $decrypted.GetType().FullName | Should Be System.Security.SecureString
-        }
-
-        It 'Decrypts the SecureString properly.' {
-            Get-PlainTextFromSecureString -SecureString $decrypted | Should Be $stringToEncrypt
-        }
-    }
-
-    Context 'Protecting PSCredentials' {
-        $protectedData = $credentialToEncrypt | Protect-Data -CertificateThumbprint $certThumbprint -SkipCertificateVerification
-        $decrypted = $protectedData | Unprotect-Data -CertificateThumbprint $certThumbprint -SkipCertificateVerification
-
-        It 'Does not return null' {
-            $decrypted | Should Not Be $null
-        }
-
-        It 'Returns a PSCredential object' {
-            $decrypted.GetType().FullName | Should Be System.Management.Automation.PSCredential
-        }
-
-        It 'Decrypts the PSCredential properly (username)' {
-            $decrypted.UserName | Should Be $userName
-        }
-
-        It 'Decrypts the PSCredential properly (password)' {
-            Get-PlainTextFromSecureString -SecureString $decrypted.Password | Should Be $stringToEncrypt
-        }
-    }
-
-    Context 'Protecting Byte Arrays' {
-        $protectedData = Protect-Data -InputObject $byteArrayToEncrypt -CertificateThumbprint $certThumbprint -SkipCertificateVerification
-        $decrypted = Unprotect-Data -InputObject $protectedData -CertificateThumbprint $certThumbprint -SkipCertificateVerification
-
-        It 'Does not return null' {
-            ,$decrypted | Should Not Be $null
-        }
-
-        It 'Returns a byte array' {
-            $decrypted.GetType().FullName | Should Be System.Byte[]
-        }
-
-        It 'Decrypts the byte array properly' {
-            ($byteArrayToEncrypt.Length -eq $decrypted.Length -and (-join $byteArrayToEncrypt) -eq (-join $decrypted)) | Should Be $True
         }
     }
 
@@ -447,11 +239,11 @@ Describe 'Certificate-Based encryption and decryption (By certificate object)' {
             { $null = Unprotect-Data -InputObject $protected -Certificate $wrongCertFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Throw
         }
 
-        It 'Allows any of the specified certificates to be used during decryption (First thumbprint test)' {
+        It 'Allows any of the specified certificates to be used during decryption (First certificate test)' {
             { $null = Unprotect-Data -InputObject $protected -Certificate $certFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
         }
 
-        It 'Allows any of the specified certificates to be used during decryption (Second thumbprint test)' {
+        It 'Allows any of the specified certificates to be used during decryption (Second certificate test)' {
             { $null = Unprotect-Data -InputObject $protected -Certificate $secondCertFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
         }
 
@@ -471,7 +263,7 @@ Describe 'Certificate-Based encryption and decryption (By certificate object)' {
             { $null = Remove-ProtectedDataCredential -InputObject $protected -Certificate $secondCertFromFile } | Should Not Throw
         }
 
-        It 'No longer allows the data to be decrypted with the removed password' {
+        It 'No longer allows the data to be decrypted with the removed certificate' {
             { $null = Unprotect-Data -InputObject $protected -Certificate $secondCertFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Throw
         }
     }
@@ -592,16 +384,70 @@ Describe 'Legacy Padding Support' {
     }
 }
 
-Describe 'CNG Key Storage Provider' {
-    $testCert = New-TestCertificate -Subject $testCertificateSubject -CngProvider
+Describe 'RSA Certificates (CNG Key Storage Provider)' {
+    Context 'RSA Certificates (CNG Key Storage Provider)' {
+        $thumbprint = New-TestCertificate -Subject $testCertificateSubject -CertificateType RsaCng
+        $testCert = Get-Item Cert:\CurrentUser\My\$thumbprint
 
-    $protectedData = Protect-Data -InputObject $stringToEncrypt -CertificateThumbprint $testCert -SkipCertificateVerification
+        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification
 
-    It 'Decrypts data successfully using an RSA cert using a CNG KSP' {
-        { Unprotect-Data -InputObject $protectedData -CertificateThumbprint $testCert -SkipCertificateVerification }|
-        Should Not Throw
+        It 'Decrypts data successfully using an RSA cert using a CNG KSP' {
+            { Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification }|
+            Should Not Throw
 
-        Unprotect-Data -InputObject $protectedData -CertificateThumbprint $testCert -SkipCertificateVerification |
-        Should Be $stringToEncrypt
+            Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification |
+            Should Be $stringToEncrypt
+        }
     }
+
+    Remove-TestCertificate
+}
+
+Describe 'ECDH Certificates' {
+    Context 'ECDH_P256' {
+        $thumbprint = New-TestCertificate -Subject $testCertificateSubject -CertificateType Ecdh_P256
+        $testCert = Get-Item Cert:\CurrentUser\My\$thumbprint
+
+        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification
+
+        It 'Decrypts data successfully using an ECDH_P256 certificate' {
+            { Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification }|
+            Should Not Throw
+
+            Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification |
+            Should Be $stringToEncrypt
+        }
+    }
+
+    Context 'ECDH_P384' {
+        $thumbprint = New-TestCertificate -Subject $testCertificateSubject -CertificateType Ecdh_P384
+        $testCert = Get-Item Cert:\CurrentUser\My\$thumbprint
+
+        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification
+
+        It 'Decrypts data successfully using an ECDH_P384 certificate' {
+            { Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification }|
+            Should Not Throw
+
+            Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification |
+            Should Be $stringToEncrypt
+        }
+    }
+
+    Context 'ECDH_P521' {
+        $thumbprint = New-TestCertificate -Subject $testCertificateSubject -CertificateType Ecdh_P521
+        $testCert = Get-Item Cert:\CurrentUser\My\$thumbprint
+
+        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification
+
+        It 'Decrypts data successfully using an ECDH certificate' {
+            { Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification }|
+            Should Not Throw
+
+            Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification |
+            Should Be $stringToEncrypt
+        }
+    }
+
+    Remove-TestCertificate
 }

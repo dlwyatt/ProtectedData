@@ -18,13 +18,13 @@ SHORT DESCRIPTION
 
       The ProtectedData module exists to overcome this limitation, while still
       allowing the convenience of not having to worry about managing or protecting
-      encryption keys.  It does this, primarily, by leveraging RSA certificates.
+      encryption keys.  It does this, primarily, by leveraging digital certificates.
     
   How It Works
       When you send a piece of data to the Protect-Data command, it is encrypted
       using a randomly-generated AES key and initialization vector (IV).  Copies
       of this key and IV are then encrypted using either the public keys of RSA
-      certificates, or using a password-derived AES key (more on that later.)
+      or ECDH certificates, or using a password-derived AES key (more on that later.)
 
       The resulting object can be persisted to disk with Export-Clixml, and can
       later be read back in with Import-Clixml and then passed to the
@@ -34,15 +34,15 @@ SHORT DESCRIPTION
       when calling Unprotect-Data, you must have the certificate's private key.
 
   Regarding Password-derived Keys
-      This module's intended use is to leverage RSA encryption wherever possible.
-      This is what provides security, without the need for the user to worry about
-      key protection or key management; the operating system takes care of this for
+      This module's intended use is to leverage certificate-based encryption wherever
+      possible.  This is what provides security, without the need for the user to worry
+      about key protection or key management; the operating system takes care of this for
       you when you install a certificate (with or without its private key.)
 
       The various -Password parameters to the ProtectedData module's commands are
       intended as a backup mechanism.  If you are unable to decrypt the data with
       a certificate for some reason, you'd be able to enter the correct password
-      to retrieve it or to add a new RSA-encrypted copy of the keys.
+      to retrieve it or to add a new certificate-encrypted copy of the keys.
 
       If you do use the Password functionality of the module, you're encouraged to
       always enter these passwords interactively.  If you try to persist the passwords
@@ -76,11 +76,12 @@ SHORT DESCRIPTION
 
   Certificate requirements
       The RSA certificates used with this module must allow Key Encipherment in their
-      Key Usage extension, if present.  They must also be issued by a trusted certificate
+      Key Usage extension, if present.  ECDH certificate must allow the Key Agreement
+      Key Usage extension. All certificates must also be issued by a trusted certificate
       authority and be currently valid, unless you pass the -SkipCertificateVerification
       switch parameter when calling the various commands in the module.  This switch
       allows you to leverage self-signed certificates, etc, if you don't care about
-      validating a trust chain and just want to get at the RSA key pair.
+      validating a trust chain and just want to get at the certificate's key pair.
 
       You can verify which of your certificates are usable for both encryption and
       decryption ahead of time by running the following command:
