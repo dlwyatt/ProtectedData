@@ -1600,8 +1600,8 @@ function Unprotect-KeyDataWithEcdhCertificate
             throw "Error:  Key material derived from ECDH certificate $($Certificate.Thumbprint) was less than the required 32 bytes"
         }
 
-        $key = (Unprotect-DataWithAes -CipherText $KeyData.Key -Key $derivedKey.Array -IV $KeyData.EcdhIV).PlainText
-        $iv = (Unprotect-DataWithAes -CipherText $KeyData.IV -Key $derivedKey.Array -IV $KeyData.EcdhIV).PlainText
+        $key = (Unprotect-DataWithAes -CipherText $KeyData.Key -Key $derivedKey -IV $KeyData.EcdhIV).PlainText
+        $iv = (Unprotect-DataWithAes -CipherText $KeyData.IV -Key $derivedKey -IV $KeyData.EcdhIV).PlainText
 
         $doFinallyBlock = $false
 
@@ -1736,39 +1736,25 @@ function Protect-KeyDataWithPassword
         $IterationCount = 1000
     )
 
-    $aes = $null
-    $keyStream = $null
-    $keyCryptoStream = $null
-    $IVStream = $null
-    $IVCryptoStream = $null
     $keyGen = $null
+    $ephemeralKey = $null
+    $ephemeralIV = $null
 
     try
     {
         $keyGen = Get-KeyGenerator -Password $Password -IterationCount $IterationCount
-        $aes = New-Object System.Security.Cryptography.AesCryptoServiceProvider
-        $aes.Key = $keyGen.GetBytes(32)
-        $aes.IV = $keyGen.GetBytes($aes.BlockSize / 8)
-        $keyStream = New-Object System.IO.MemoryStream
-        $IVStream = New-Object System.IO.MemoryStream
-        $keyCryptoStream = New-Object System.Security.Cryptography.CryptoStream(
-            $keyStream, $aes.CreateEncryptor(), 'Write'
-        )
-        $IVCryptoStream = New-Object System.Security.Cryptography.CryptoStream(
-            $IVStream, $aes.CreateEncryptor(), 'Write'
-        )
+        $ephemeralKey = New-Object PowerShellUtils.PinnedArray[byte](,$keyGen.GetBytes(32))
+        $ephemeralIV = New-Object PowerShellUtils.PinnedArray[byte](,$keyGen.GetBytes(16))
+
         $hashSalt = Get-RandomBytes -Count 32
-
-        $keyCryptoStream.Write($Key, 0, $Key.Count)
-        $keyCryptoStream.FlushFinalBlock()
-        $IVCryptoStream.Write($IV, 0, $IV.Count)
-        $IVCryptoStream.FlushFinalBlock()
-
         $hash = Get-PasswordHash -Password $Password -Salt $hashSalt -IterationCount $IterationCount
 
+        $encryptedKey = (Protect-DataWithAes -PlainText $Key -Key $ephemeralKey -IV $ephemeralIV).CipherText
+        $encryptedIV = (Protect-DataWithAes -PlainText $IV -Key $ephemeralKey -IV $ephemeralIV).CipherText
+
         New-Object psobject -Property @{
-            Key = $keyStream.ToArray()
-            IV = $IVStream.ToArray()
+            Key = $encryptedKey
+            IV = $encryptedIV
             Salt = $keyGen.Salt
             IterationCount = $keyGen.IterationCount
             Hash = $hash
@@ -1781,12 +1767,9 @@ function Protect-KeyDataWithPassword
     }
     finally
     {
-        if ($null -ne $aes) { $aes.Clear() }
-        if ($keyCryptoStream -is [IDisposable]) { $keyCryptoStream.Dispose() }
-        if ($IVCryptoStream -is [IDisposable]) { $IVCryptoStream.Dispose() }
-        if ($keyStream -is [IDisposable]) { $keyStream.Dispose() }
-        if ($IVStream -is [IDisposable]) { $IVStream.Dispose() }
         if ($keyGen -is [IDisposable]) { $keyGen.Dispose() }
+        if ($ephemeralKey -is [IDisposable]) { $ephemeralKey.Dispose() }
+        if ($ephemeralIV -is [IDisposable]) { $ephemeralIV.Dispose() }
     }
 
 } # function Protect-KeyDataWithPassword
@@ -1803,16 +1786,13 @@ function Unprotect-KeyDataWithPassword
         $Password
     )
 
-    # Derive an encryption key from the provided KeyData and Password parameters, and attempt to decrypt the
-    # KeyData's Key and IV arrays using the derived key. If successful, return an object containing the
-    # decrypted key / IV, which will be used to initialize a crypto provider.
-
     $keyGen = $null
-    $aes = $null
-    $keyStream = $null
-    $keyCryptoStream = $null
-    $IVStream = $null
-    $IVCryptoStream = $null
+    $key = $null
+    $iv = $null
+    $ephemeralKey = $null
+    $ephemeralIV = $null
+
+    $doFinallyBlock = $true
 
     try
     {
@@ -1823,47 +1803,18 @@ function Unprotect-KeyDataWithPassword
         }
 
         $keyGen = Get-KeyGenerator @params
-        $aes = New-Object System.Security.Cryptography.AesCryptoServiceProvider
-        $aes.Key = $keyGen.GetBytes(32)
-        $aes.IV = $keyGen.GetBytes($aes.BlockSize / 8)
-        $keyStream = New-Object System.IO.MemoryStream
-        $IVStream = New-Object System.IO.MemoryStream
-        $keyCryptoStream = New-Object System.Security.Cryptography.CryptoStream(
-            $keyStream, $aes.CreateDecryptor(), 'Write'
-        )
-        $IVCryptoStream = New-Object System.Security.Cryptography.CryptoStream(
-            $IVStream, $aes.CreateDecryptor(), 'Write'
-        )
+        $ephemeralKey = New-Object PowerShellUtils.PinnedArray[byte](,$keyGen.GetBytes(32))
+        $ephemeralIV = New-Object PowerShellUtils.PinnedArray[byte](,$keyGen.GetBytes(16))
 
-        $keyCryptoStream.Write($KeyData.Key, 0, $KeyData.Key.Count)
-        $keyCryptoStream.FlushFinalBlock()
-        $IVCryptoStream.Write($KeyData.IV, 0, $KeyData.IV.Count)
-        $IVCryptoStream.FlushFinalBlock()
+        $key = (Unprotect-DataWithAes -CipherText $KeyData.Key -Key $ephemeralKey -IV $ephemeralIV).PlainText
+        $iv = (Unprotect-DataWithAes -CipherText $KeyData.IV -Key $ephemeralKey -IV $ephemeralIV).PlainText
 
-        $doFinallyBlock = $true
+        $doFinallyBlock = $false
 
-        try
-        {
-            $key = New-Object PowerShellUtils.PinnedArray[byte](,$keyStream.ToArray())
-            $iv = New-Object PowerShellUtils.PinnedArray[byte](,$IVStream.ToArray())
-
-            $outputObject = New-Object psobject -Property @{
-                Key = $key
-                IV = $iv
-            }
-
-            $doFinallyBlock = $false
+        return New-Object psobject -Property @{
+            Key = $key
+            IV = $iv
         }
-        finally
-        {
-            if ($doFinallyBlock)
-            {
-                if ($key -is [IDisposable]) { $key.Dispose() }
-                if ($iv -is [IDisposable]) { $iv.Dispose() }
-            }
-        }
-
-        $outputObject
     }
     catch
     {
@@ -1871,14 +1822,16 @@ function Unprotect-KeyDataWithPassword
     }
     finally
     {
-        if ($null -ne $aes) { $aes.Clear() }
-        if ($keyCryptoStream -is [IDisposable]) { $keyCryptoStream.Dispose() }
-        if ($IVCryptoStream -is [IDisposable]) { $IVCryptoStream.Dispose() }
-        if ($keyStream -is [IDisposable]) { $keyStream.Dispose() }
-        if ($IVStream -is [IDisposable]) { $IVStream.Dispose() }
         if ($keyGen -is [IDisposable]) { $keyGen.Dispose() }
-    }
+        if ($ephemeralKey -is [IDisposable]) { $ephemeralKey.Dispose() }
+        if ($ephemeralIV -is [IDisposable]) { $ephemeralIV.Dispose() }
 
+        if ($doFinallyBlock)
+        {
+            if ($key -is [IDisposable]) { $key.Dispose() }
+            if ($iv -is [IDisposable]) { $iv.Dispose() }
+        }
+    }
 } # function Unprotect-KeyDataWithPassword
 
 function ConvertTo-PinnedByteArray
