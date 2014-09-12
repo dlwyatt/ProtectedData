@@ -398,6 +398,16 @@ Describe 'RSA Certificates (CNG Key Storage Provider)' {
             Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification |
             Should Be $stringToEncrypt
         }
+
+        $protectedWithLegacyPadding = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification -UseLegacyPadding
+
+        It 'Decrypts data successfully with legacy padding' {
+            { Unprotect-Data -InputObject $protectedWithLegacyPadding -Certificate $testCert -SkipCertificateVerification }|
+            Should Not Throw
+
+            Unprotect-Data -InputObject $protectedWithLegacyPadding -Certificate $testCert -SkipCertificateVerification |
+            Should Be $stringToEncrypt
+        }
     }
 
     Remove-TestCertificate
