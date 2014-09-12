@@ -55,13 +55,13 @@ Add-Type -TypeDefinition @'
                 get { return Length; }
             }
 
-            public PinnedArray(uint byteCount)
+            public PinnedArray(uint count)
             {
-                array = new T[byteCount];
+                array = new T[count];
                 gcHandle = GCHandle.Alloc(Array, GCHandleType.Pinned);
             }
 
-            public PinnedArray(uint byteCount, bool clearOnDispose) : this(byteCount)
+            public PinnedArray(uint count, bool clearOnDispose) : this(count)
             {
                 ClearOnDispose = clearOnDispose;
             }
