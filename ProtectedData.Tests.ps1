@@ -54,8 +54,8 @@ Describe 'Password-based encryption and decryption' {
         }
 
         It 'Adds a new password to an existing object' {
-            $scriptBlock = { Add-ProtectedDataCredential -InputObject $protected -Password $passwordForEncryption -NewPassword $wrongPassword }
-            $scriptBlock | Should Not Throw
+            { Add-ProtectedDataCredential -InputObject $protected -Password $passwordForEncryption -NewPassword $wrongPassword } | 
+            Should Not Throw
         }
 
         It 'Allows the object to be decrypted with the new password' {
@@ -392,9 +392,6 @@ Describe 'RSA Certificates (CNG Key Storage Provider)' {
         $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification
 
         It 'Decrypts data successfully using an RSA cert using a CNG KSP' {
-            { Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification }|
-            Should Not Throw
-
             Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification |
             Should Be $stringToEncrypt
         }
@@ -402,9 +399,6 @@ Describe 'RSA Certificates (CNG Key Storage Provider)' {
         $protectedWithLegacyPadding = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification -UseLegacyPadding
 
         It 'Decrypts data successfully with legacy padding' {
-            { Unprotect-Data -InputObject $protectedWithLegacyPadding -Certificate $testCert -SkipCertificateVerification }|
-            Should Not Throw
-
             Unprotect-Data -InputObject $protectedWithLegacyPadding -Certificate $testCert -SkipCertificateVerification |
             Should Be $stringToEncrypt
         }
@@ -421,9 +415,6 @@ Describe 'ECDH Certificates' {
         $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification
 
         It 'Decrypts data successfully using an ECDH_P256 certificate' {
-            { Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification }|
-            Should Not Throw
-
             Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification |
             Should Be $stringToEncrypt
         }
@@ -436,9 +427,6 @@ Describe 'ECDH Certificates' {
         $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification
 
         It 'Decrypts data successfully using an ECDH_P384 certificate' {
-            { Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification }|
-            Should Not Throw
-
             Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification |
             Should Be $stringToEncrypt
         }
@@ -451,9 +439,6 @@ Describe 'ECDH Certificates' {
         $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification
 
         It 'Decrypts data successfully using an ECDH certificate' {
-            { Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification }|
-            Should Not Throw
-
             Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification |
             Should Be $stringToEncrypt
         }
