@@ -39,7 +39,10 @@ function New-TestCertificate
 
         [ValidateSet('Rsa', 'RsaCng', 'Ecdh_P256', 'Ecdh_P384', 'Ecdh_P521')]
         [string]
-        $CertificateType = 'Rsa'
+        $CertificateType = 'Rsa',
+
+        [switch]
+        $NoKeyUsageExtension
     )
 
     if ($null -ne $NotBefore -and $null -ne $NotAfter -and $NotBefore -ge $NotAfter)
@@ -141,7 +144,12 @@ Silent = True
 SuppressDefaults = True
 $keySpec
 $keyAlgorithm
-KeyUsage = $keyUsage
+$(
+    if (-not $NoKeyUsageExtension)
+    {
+        "KeyUsage = $keyUsage"
+    }
+)
 $notBeforeString
 $notAfterString
 "@
