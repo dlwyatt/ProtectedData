@@ -27,7 +27,7 @@ function Protect-Data
        Encrypts an object using one or more digital certificates and/or passwords.
     .DESCRIPTION
        Encrypts an object using a randomly-generated AES key. AES key information is encrypted using one or more certificate public keys and/or password-derived keys, allowing the data to be securely shared among multiple users and computers.
-       If certificates are used, they must be installed in either the local computer or local user's certificate stores, and the certificates' Key Usage extension (if present) must allow Key Encipherment. The private keys are not required for Protect-Data.
+       If certificates are used, they must be installed in either the local computer or local user's certificate stores, and the certificates' Key Usage extension must allow Key Encipherment (for RSA) or Key Agreement (for ECDH). The private keys are not required for Protect-Data.
     .PARAMETER InputObject
        The object that is to be encrypted. The object must be of one of the types returned by the Get-ProtectedDataSupportedTypes command.
     .PARAMETER CertificateThumbprint
@@ -797,7 +797,7 @@ function Get-KeyEncryptionCertificate
     .Synopsis
        Finds certificates which can be used by Protect-Data and related commands.
     .DESCRIPTION
-       Searches the given path, and all child paths, for certificates which can be used by Protect-Data. Such certificates must support Key Encipherment usage, and by default, must not be expired and must be issued by a trusted authority.
+       Searches the given path, and all child paths, for certificates which can be used by Protect-Data. Such certificates must support Key Encipherment (for RSA) or Key Agreement (for ECDH) usage, and by default, must not be expired and must be issued by a trusted authority.
     .PARAMETER Path
        Path which should be searched for the certifictes. Defaults to the entire Cert: drive.
     .PARAMETER CertificateThumbprint
@@ -809,7 +809,7 @@ function Get-KeyEncryptionCertificate
     .EXAMPLE
        Get-KeyEncryptionCertificate -Path Cert:\CurrentUser -RequirePrivateKey -SkipCertificateVerification
 
-       Searches for certificates which support key encipherment and have a private key installed. All matching certificates are returned, and they do not need to be verified for trust, revocation or validity period.
+       Searches for certificates which support key encipherment (RSA) or key agreement (ECDH) and have a private key installed. All matching certificates are returned, and they do not need to be verified for trust, revocation or validity period.
     .EXAMPLE
        Get-KeyEncryptionCertificate -Path Cert:\CurrentUser\TrustedPeople
 
@@ -1183,22 +1183,19 @@ function ValidateKeyEncryptionCertificate
             $neededKeyUsage = [System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::KeyEncipherment
         }
 
-        $keyUsageFound = $false
         $keyUsageFlags = 0
 
         foreach ($extension in $Certificate.Extensions)
         {
             if ($extension -is [System.Security.Cryptography.X509Certificates.X509KeyUsageExtension])
             {
-                $keyUsageFound = $true
                 $keyUsageFlags = $keyUsageFlags -bor $extension.KeyUsages
             }
         }
 
-        if ($keyUsageFound -and ($keyUsageFlags -band $neededKeyUsage) -ne $neededKeyUsage)
+        if (($keyUsageFlags -band $neededKeyUsage) -ne $neededKeyUsage)
         {
-            Write-Error ("Certificate '$($Certificate.Thumbprint)' contains a Key Usage extension which does not" +
-                        "allow $($neededKeyUsage.ToString()).")
+            Write-Error "Certificate '$($Certificate.Thumbprint)' does not have the required $($neededKeyUsage.ToString()) Key Usage flag."
             return
         }
 
