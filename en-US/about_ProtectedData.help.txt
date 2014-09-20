@@ -76,8 +76,8 @@ SHORT DESCRIPTION
 
   Certificate requirements
       The RSA certificates used with this module must allow Key Encipherment in their
-      Key Usage extension, if present.  ECDH certificate must allow the Key Agreement
-      Key Usage extension. All certificates must also be issued by a trusted certificate
+      Key Usage extension.  ECDH certificate must allow the Key Agreement Key Usage
+      extension. All certificates must also be issued by a trusted certificate
       authority and be currently valid, unless you pass the -SkipCertificateVerification
       switch parameter when calling the various commands in the module.  This switch
       allows you to leverage self-signed certificates, etc, if you don't care about
