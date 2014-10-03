@@ -218,8 +218,11 @@ Describe 'Certificate-based encryption and decryption (By thumbprint)' {
 
     Context 'Certificate with no Key Usage extension' {
         $noKeyUsageThumbprint = New-TestCertificate -Subject $testCertificateSubject -NoKeyUsageExtension
-        $scriptBlock = { Get-KeyEncryptionCertificate -CertificateThumbprint $noKeyUsageThumbprint -SkipCertificateVerification -ErrorAction Stop }
-        $scriptBlock | Should Throw "Certificate '$noKeyUsageThumbprint' does not have the required KeyEncipherment Key Usage flag."
+
+        It 'Throws an error if a certificate does not contain a KeyUsage extension' {
+            $scriptBlock = { Get-KeyEncryptionCertificate -CertificateThumbprint $noKeyUsageThumbprint -SkipCertificateVerification -ErrorAction Stop }
+            $scriptBlock | Should Throw "Certificate '$noKeyUsageThumbprint' does not have the required KeyEncipherment Key Usage flag."
+        }
     }
 
     Remove-TestCertificate
