@@ -160,8 +160,15 @@ function Protect-Data
             {
                 try
                 {
-                    $x509Cert = ConvertTo-X509Certificate2 -InputObject $cert
-                    ValidateKeyEncryptionCertificate -CertificateGroup $x509Cert -SkipCertificateVerification:$SkipCertificateVerification
+
+                    $x509Cert = ConvertTo-X509Certificate2 -InputObject $cert -ErrorAction Stop
+                    
+                    $params = @{
+                        CertificateGroup = $x509Cert
+                        SkipCertificateVerification = $SkipCertificateVerification
+                    }
+                    
+                    ValidateKeyEncryptionCertificate @params -ErrorAction Stop
                 }
                 catch
                 {
@@ -349,13 +356,15 @@ function Unprotect-Data
         {
             try
             {
+                $cert = ConvertTo-X509Certificate2 -InputObject $Certificate -ErrorAction Stop
+                
                 $params = @{
+                    CertificateGroup = $cert
                     RequirePrivateKey = $true
                     SkipCertificateVerification = $SkipCertificateVerification
                 }
-
-                $cert = ConvertTo-X509Certificate2 -InputObject $Certificate
-                $cert = ValidateKeyEncryptionCertificate -CertificateGroup $cert @params -ErrorAction Stop
+                
+                $cert = ValidateKeyEncryptionCertificate @params -ErrorAction Stop
             }
             catch
             {
@@ -484,7 +493,7 @@ function Add-ProtectedDataCredential
         $CertificateThumbprint,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
-        [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        [object]
         $Certificate,
 
         [Parameter(ParameterSetName = 'Certificate')]
@@ -511,7 +520,7 @@ function Add-ProtectedDataCredential
 
         [ValidateNotNull()]
         [AllowEmptyCollection()]
-        [System.Security.Cryptography.X509Certificates.X509Certificate2[]]
+        [object[]]
         $NewCertificate = @(),
 
         [switch]
@@ -559,12 +568,14 @@ function Add-ProtectedDataCredential
         {
             try
             {
+                $decryptionCert = ConvertTo-X509Certificate2 -InputObject $Certificate -ErrorAction Stop
+                
                 $params = @{
-                    CertificateGroup = $Certificate
+                    CertificateGroup = $decryptionCert
                     SkipCertificateVerification = $SkipCertificateVerification
                     RequirePrivateKey = $true
                 }
-
+                
                 $decryptionCert = ValidateKeyEncryptionCertificate @params -ErrorAction Stop
             }
             catch
@@ -594,7 +605,21 @@ function Add-ProtectedDataCredential
 
             foreach ($cert in $NewCertificate)
             {
-                ValidateKeyEncryptionCertificate -CertificateGroup $cert -SkipCertificateVerification:$SkipCertificateVerification
+                try
+                {
+                    $x509Cert = ConvertTo-X509Certificate2 -InputObject $cert -ErrorAction Stop
+
+                    $params = @{
+                        CertificateGroup = $x509Cert
+                        SkipCertificateVerification = $SkipCertificateVerification
+                    }
+
+                    ValidateKeyEncryptionCertificate @params -ErrorAction Stop
+                }
+                catch
+                {
+                    Write-Error -ErrorRecord $_
+                }
             }
         )
 
@@ -712,7 +737,7 @@ function Remove-ProtectedDataCredential
 
         [ValidateNotNull()]
         [AllowEmptyCollection()]
-        [System.Security.Cryptography.X509Certificates.X509Certificate2[]]
+        [object[]]
         $Certificate,
 
         [ValidateNotNull()]
@@ -726,8 +751,15 @@ function Remove-ProtectedDataCredential
 
     begin
     {
-        $thumbprints = $CertificateThumbprint + ($Certificate | Select-Object -ExpandProperty Thumbprint) |
-                       Get-Unique
+        $thumbprints = @(
+            $CertificateThumbprint
+
+            $Certificate |
+            ConvertTo-X509Certificate2 |
+            Select-Object -ExpandProperty Thumbprint
+        )
+
+        $thumbprints = $thumbprints | Get-Unique
     }
 
     process
@@ -894,30 +926,38 @@ function ConvertTo-X509Certificate2
     [CmdletBinding()]
     [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
     param (
-        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
-        [object] $InputObject
+        [Parameter(ValueFromPipeline = $true)]
+        [object[]] $InputObject = @()
     )
 
-    $possibleCerts = @(
-        $InputObject -as [System.Security.Cryptography.X509Certificates.X509Certificate2]
-
-        GetCertificateFromPSPath -Path $InputObject
-
-        if ($InputObject -match '^[A-F\d]+$')
+    process
+    {
+        foreach ($object in $InputObject)
         {
-            GetCertificateByThumbprint -Thumbprint $InputObject
+            if ($null -eq $object) { continue }
+
+            $possibleCerts = @(
+                $object -as [System.Security.Cryptography.X509Certificates.X509Certificate2]
+
+                GetCertificateFromPSPath -Path $object
+
+                if ($object -match '^[A-F\d]+$')
+                {
+                    GetCertificateByThumbprint -Thumbprint $object
+                }
+            ) -ne $null
+
+            $cert = $possibleCerts | Select-Object -First 1
+
+            if ($null -ne $cert)
+            {
+                $cert
+            }
+            else
+            {
+                Write-Error "No certificate with identifier '$object' of type $($object.GetType().FullName) was found."
+            }
         }
-    ) -ne $null
-
-    $cert = $possibleCerts | Select-Object -First 1
-
-    if ($null -ne $cert)
-    {
-        return $cert
-    }
-    else
-    {
-        throw "No certificate with identifier '$InputObject' of type $($InputObject.GetType().FullName) was found."
     }
 }
 
