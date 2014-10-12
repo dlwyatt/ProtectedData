@@ -8,7 +8,7 @@
 
 @{
     ModuleToProcess        = 'ProtectedData.psm1'
-    ModuleVersion          = '2.0'
+    ModuleVersion          = '2.1'
     GUID                   = 'fc6a2f6a-563d-422a-85b5-9638e45a370e'
     Author                 = 'Dave Wyatt'
     CompanyName            = 'Home'
@@ -22,4 +22,23 @@
     CmdletsToExport        = '*'
     VariablesToExport      = '*'
     AliasesToExport        = '*'
+
+    PrivateData = @{
+        PSData = @{
+            # The primary categorization of this module (from the TechNet Gallery tech tree).
+            Category = 'Scripting Techniques'
+
+            # Keyword tags to help users find this module via navigations and search.
+            Tags = @('powershell','encryption')
+
+            # The web address of this module's project or support homepage.
+            ProjectUri = 'https://github.com/dlwyatt/ProtectedData'
+
+            # The web address of this module's license. Points to a page that's embeddable and linkable.
+            LicenseUri = 'http://www.gnu.org/licenses/gpl-2.0.html'
+
+            # Indicates this is a pre-release/testing version of the module.
+            IsPrerelease = 'False'
+        }
+    }
 }
