@@ -54,7 +54,7 @@ Describe 'Password-based encryption and decryption' {
         }
 
         It 'Adds a new password to an existing object' {
-            { Add-ProtectedDataCredential -InputObject $protected -Password $passwordForEncryption -NewPassword $wrongPassword } | 
+            { Add-ProtectedDataCredential -InputObject $protected -Password $passwordForEncryption -NewPassword $wrongPassword } |
             Should Not Throw
         }
 

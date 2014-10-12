@@ -167,12 +167,12 @@ function Protect-Data
                 {
 
                     $x509Cert = ConvertTo-X509Certificate2 -InputObject $cert -ErrorAction Stop
-                    
+
                     $params = @{
                         CertificateGroup = $x509Cert
                         SkipCertificateVerification = $SkipCertificateVerification
                     }
-                    
+
                     ValidateKeyEncryptionCertificate @params -ErrorAction Stop
                 }
                 catch
@@ -367,13 +367,13 @@ function Unprotect-Data
             try
             {
                 $cert = ConvertTo-X509Certificate2 -InputObject $Certificate -ErrorAction Stop
-                
+
                 $params = @{
                     CertificateGroup = $cert
                     RequirePrivateKey = $true
                     SkipCertificateVerification = $SkipCertificateVerification
                 }
-                
+
                 $cert = ValidateKeyEncryptionCertificate @params -ErrorAction Stop
             }
             catch
@@ -438,7 +438,7 @@ function Add-ProtectedDataCredential
        This parameter has been deprecated, and will eventually be removed.  You can now pass certificate thumbprints to the -Certificate parameter instead.
        The thumbprint of a certificate which was previously used to encrypt the ProtectedData structure's key. You must have the certificate's private key.  You can pass an X509Certificate2 object to this parameter, or you can pass in a string which contains either a path to a certificate file on the file system, a path to the certificate in the Certificate provider, or a certificate thumbprint (in which case the certificate provider will be searched to find the certificate.)
     .PARAMETER Certificate
-       An RSA or ECDH certificate which was previously used to encrypt the ProtectedData structure's key.  
+       An RSA or ECDH certificate which was previously used to encrypt the ProtectedData structure's key.
     .PARAMETER Password
        A password which was previously used to encrypt the ProtectedData structure's key.
     .PARAMETER NewCertificateThumbprint
@@ -591,13 +591,13 @@ function Add-ProtectedDataCredential
             try
             {
                 $decryptionCert = ConvertTo-X509Certificate2 -InputObject $Certificate -ErrorAction Stop
-                
+
                 $params = @{
                     CertificateGroup = $decryptionCert
                     SkipCertificateVerification = $SkipCertificateVerification
                     RequirePrivateKey = $true
                 }
-                
+
                 $decryptionCert = ValidateKeyEncryptionCertificate @params -ErrorAction Stop
             }
             catch
@@ -965,14 +965,13 @@ function ConvertTo-X509Certificate2
 
             $possibleCerts = @(
                 $object -as [System.Security.Cryptography.X509Certificates.X509Certificate2]
-
                 GetCertificateFromPSPath -Path $object
-
-                if ($object -match '^[A-F\d]+$')
-                {
-                    GetCertificateByThumbprint -Thumbprint $object
-                }
             ) -ne $null
+
+            if ($object -match '^[A-F\d]+$' -and $possibleCerts.Count -eq 0)
+            {
+                $possibleCerts = @(GetCertificateByThumbprint -Thumbprint $object)
+            }
 
             $cert = $possibleCerts | Select-Object -First 1
 
