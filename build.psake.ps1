@@ -10,6 +10,7 @@ Properties {
         'TestUtils.ps1'
         'build.cmd'
         'build.psake.ps1'
+        'TestCertificateFile.cer'
         'TestCertificateFile.pfx'
         'TestCertificateFile2.pfx'
         'TestCertificateFile3.pfx'
