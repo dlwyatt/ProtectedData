@@ -173,6 +173,8 @@ Describe 'Certificate-based encryption and decryption (By thumbprint)' {
     }
 
     Context 'Legacy CertificateThumbprint parameter' {
+        Mock Write-Warning -ModuleName ProtectedData { }
+
         $hash = @{}
 
         It 'Encrypts data with the -CertificateThumbprint parameter' {
@@ -183,6 +185,20 @@ Describe 'Certificate-based encryption and decryption (By thumbprint)' {
         It 'Decrypts data with the -CertificateThumbprint parameter' {
             Unprotect-Data -InputObject $hash['Protected'] -CertificateThumbprint $certThumbprint -SkipCertificateVerification |
             Should Be $stringToEncrypt
+        }
+
+        It 'Adds a new thumbprint' {
+            { Add-ProtectedDataCredential -InputObject $hash['Protected'] -CertificateThumbprint $certThumbprint -NewCertificateThumbprint $secondCertThumbprint -SkipCertificateVerification } |
+            Should Not Throw
+        }
+
+        It 'Decrypts data with the new thumbprint' {
+            Unprotect-Data -InputObject $hash['Protected'] -CertificateThumbprint $secondCertThumbprint -SkipCertificateVerification |
+            Should Be $stringToEncrypt
+        }
+
+        It 'Warns the user of the deprecated parameters' {
+            Assert-MockCalled Write-Warning -ModuleName ProtectedData -ParameterFilter { $Message -match '.*The -(New)?CertificateThumbprint parameter is now deprecated.*' }
         }
     }
 
