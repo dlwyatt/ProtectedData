@@ -31,9 +31,9 @@ function Protect-Data
     .PARAMETER InputObject
        The object that is to be encrypted. The object must be of one of the types returned by the Get-ProtectedDataSupportedTypes command.
     .PARAMETER CertificateThumbprint
-       Zero or more certificate thumbprints that should be used to encrypt the data. The certificates must be installed in the local computer or current user's certificate stores, and must be RSA or ECDH certificates. The data can later be decrypted by using the same certificate (with its private key.)
+       This parameter has been deprecated, and will eventually be removed.  You can now pass certificate thumbprints to the -Certificate parameter instead.
     .PARAMETER Certificate
-       Zero or more X509Certificate2 objects that should be used to encrypt the data.  Using this parameter instead of CertificateThumbprint can offer more flexibility, as the certificate may be loaded from a file instead of being installed in a certificate store.
+       Zero or more RSA or ECDH certificates that should be used to encrypt the data. The data can later be decrypted by using the same certificate (with its private key.)  You can pass an X509Certificate2 object to this parameter, or you can pass in a string which contains either a path to a certificate file on the file system, a path to the certificate in the Certificate provider, or a certificate thumbprint (in which case the certificate provider will be searched to find the certificate.)
     .PARAMETER UseLegacyPadding
        Optional switch specifying that when performing certificate-based encryption, PKCS#1 v1.5 padding should be used instead of the newer, more secure OAEP padding scheme.  Some certificates may not work properly with OAEP padding
     .PARAMETER Password
@@ -95,6 +95,11 @@ function Protect-Data
 
         [ValidateNotNullOrEmpty()]
         [AllowEmptyCollection()]
+        [object[]]
+        $Certificate = @(),
+
+        [ValidateNotNullOrEmpty()]
+        [AllowEmptyCollection()]
         [ValidateScript({
             if ($_ -notmatch '^[A-F\d]+$')
             {
@@ -105,11 +110,6 @@ function Protect-Data
         })]
         [string[]]
         $CertificateThumbprint = @(),
-
-        [ValidateNotNullOrEmpty()]
-        [AllowEmptyCollection()]
-        [System.Security.Cryptography.X509Certificates.X509Certificate2[]]
-        $Certificate = @(),
 
         [switch]
         $UseLegacyPadding,
@@ -137,6 +137,11 @@ function Protect-Data
 
     begin
     {
+        if ($PSBoundParameters.ContainsKey('CertificateThumbprint'))
+        {
+            Write-Warning 'The -CertificateThumbprint parameter is now deprecated.  Use the -Certificate parameter instead.  You can pass a thumbprint to the -Certificate parameter.'
+        }
+
         $certs = @(
             foreach ($thumbprint in $CertificateThumbprint)
             {
@@ -158,7 +163,22 @@ function Protect-Data
 
             foreach ($cert in $Certificate)
             {
-                ValidateKeyEncryptionCertificate -CertificateGroup $cert -SkipCertificateVerification:$SkipCertificateVerification
+                try
+                {
+
+                    $x509Cert = ConvertTo-X509Certificate2 -InputObject $cert -ErrorAction Stop
+
+                    $params = @{
+                        CertificateGroup = $x509Cert
+                        SkipCertificateVerification = $SkipCertificateVerification
+                    }
+
+                    ValidateKeyEncryptionCertificate @params -ErrorAction Stop
+                }
+                catch
+                {
+                    Write-Error -ErrorRecord $_
+                }
             }
         )
 
@@ -231,9 +251,9 @@ function Unprotect-Data
     .PARAMETER InputObject
        The ProtectedData object that is to be decrypted.
     .PARAMETER CertificateThumbprint
-       Thumbprint of an RSA or ECDH certificate that will be used to decrypt the data. This certificate must be present in either the local computer or current user's certificate stores, and the current user must have permission to use the certificate's private key. One of the InputObject's KeyData objects must be protected with this certificate.
+       This parameter has been deprecated, and will eventually be removed.  You can now pass certificate thumbprints to the -Certificate parameter instead.
     .PARAMETER Certificate
-       An X509Certificate2 object that should be used to decrypt the data.  Using this parameter instead of CertificateThumbprint can offer more flexibility, as the certificate may be loaded from a file instead of being installed in a certificate store.  One of the InputObject's KeyData objects must be protected with this certificate.
+       An RSA or ECDH certificate that will be used to decrypt the data.  You must have the certificate's private key, and it must be one of the certificates that was used to encrypt the data.  You can pass an X509Certificate2 object to this parameter, or you can pass in a string which contains either a path to a certificate file on the file system, a path to the certificate in the Certificate provider, or a certificate thumbprint (in which case the certificate provider will be searched to find the certificate.)
     .PARAMETER Password
        A SecureString containing a password that will be used to derive an encryption key. One of the InputObject's KeyData objects must be protected with this password.
     .PARAMETER SkipCertificateValidation
@@ -291,6 +311,10 @@ function Unprotect-Data
         })]
         $InputObject,
 
+        [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
+        [object]
+        $Certificate,
+
         [Parameter(Mandatory = $true, ParameterSetName = 'Thumbprint')]
         [ValidateScript({
             if ($_ -notmatch '^[A-F\d]+$')
@@ -303,10 +327,6 @@ function Unprotect-Data
         [string]
         $CertificateThumbprint,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
-        [System.Security.Cryptography.X509Certificates.X509Certificate2]
-        $Certificate,
-
         [Parameter(Mandatory = $true, ParameterSetName = 'Password')]
         [System.Security.SecureString]
         $Password,
@@ -317,6 +337,11 @@ function Unprotect-Data
 
     begin
     {
+        if ($PSBoundParameters.ContainsKey('CertificateThumbprint'))
+        {
+            Write-Warning 'The -CertificateThumbprint parameter is now deprecated.  Use the -Certificate parameter instead.  You can pass a thumbprint to the -Certificate parameter.'
+        }
+
         $cert = $null
 
         if ($CertificateThumbprint)
@@ -341,8 +366,10 @@ function Unprotect-Data
         {
             try
             {
+                $cert = ConvertTo-X509Certificate2 -InputObject $Certificate -ErrorAction Stop
+
                 $params = @{
-                    CertificateGroup = $Certificate
+                    CertificateGroup = $cert
                     RequirePrivateKey = $true
                     SkipCertificateVerification = $SkipCertificateVerification
                 }
@@ -408,15 +435,17 @@ function Add-ProtectedDataCredential
     .PARAMETER InputObject
        The ProtectedData object which was created by an earlier call to Protect-Data.
     .PARAMETER CertificateThumbprint
-       The thumbprint of a certificate which was previously used to encrypt the ProtectedData structure's key. This certificate must be installed in the local computer or current user's stores (with its private key), and the current user must have permission to use the private key.
+       This parameter has been deprecated, and will eventually be removed.  You can now pass certificate thumbprints to the -Certificate parameter instead.
+       The thumbprint of a certificate which was previously used to encrypt the ProtectedData structure's key. You must have the certificate's private key.  You can pass an X509Certificate2 object to this parameter, or you can pass in a string which contains either a path to a certificate file on the file system, a path to the certificate in the Certificate provider, or a certificate thumbprint (in which case the certificate provider will be searched to find the certificate.)
     .PARAMETER Certificate
-       An X509Certificate2 object which was previously used to encrypt the ProtectedData structure's key.  Using this parameter instead of CertificateThumbprint can offer more flexibility, as the certificate may be loaded from a file instead of being installed in a certificate store.  The certificate object must have a private key.
+       An RSA or ECDH certificate which was previously used to encrypt the ProtectedData structure's key.
     .PARAMETER Password
        A password which was previously used to encrypt the ProtectedData structure's key.
     .PARAMETER NewCertificateThumbprint
+       This parameter has been deprecated, and will eventually be removed.  You can now pass certificate thumbprints to the -NewCertificate parameter instead.
        Zero or more certificate thumbprints that should be used to encrypt the data. The certificates must be installed in the local computer or current user's certificate stores, and must be RSA or ECDH certificates. The data can later be decrypted by using the same certificate (with its private key.)
     .PARAMETER NewCertificate
-       Zero or more X509Certificate2 objects that should be used to encrypt the data.  Using this parameter instead of CertificateThumbprint can offer more flexibility, as the certificate may be loaded from a file instead of being installed in a certificate store.
+       Zero or more RSA or ECDH certificates that should be used to encrypt the data. The data can later be decrypted by using the same certificate (with its private key.)  You can pass an X509Certificate2 object to this parameter, or you can pass in a string which contains either a path to a certificate file on the file system, a path to the certificate in the Certificate provider, or a certificate thumbprint (in which case the certificate provider will be searched to find the certificate.)
     .PARAMETER UseLegacyPadding
        Optional switch specifying that when performing certificate-based encryption, PKCS#1 v1.5 padding should be used instead of the newer, more secure OAEP padding scheme.  Some certificates may not work properly with OAEP padding
     .PARAMETER NewPassword
@@ -463,6 +492,10 @@ function Add-ProtectedDataCredential
         })]
         $InputObject,
 
+        [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
+        [object]
+        $Certificate,
+
         [Parameter(Mandatory = $true, ParameterSetName = 'Thumbprint')]
         [ValidateScript({
             if ($_ -notmatch '^[A-F\d]+$')
@@ -475,10 +508,6 @@ function Add-ProtectedDataCredential
         [string]
         $CertificateThumbprint,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
-        [System.Security.Cryptography.X509Certificates.X509Certificate2]
-        $Certificate,
-
         [Parameter(ParameterSetName = 'Certificate')]
         [Parameter(ParameterSetName = 'Thumbprint')]
         [switch]
@@ -487,6 +516,11 @@ function Add-ProtectedDataCredential
         [Parameter(Mandatory = $true, ParameterSetName = 'Password')]
         [System.Security.SecureString]
         $Password,
+
+        [ValidateNotNull()]
+        [AllowEmptyCollection()]
+        [object[]]
+        $NewCertificate = @(),
 
         [ValidateNotNullOrEmpty()]
         [AllowEmptyCollection()]
@@ -500,11 +534,6 @@ function Add-ProtectedDataCredential
         })]
         [string[]]
         $NewCertificateThumbprint = @(),
-
-        [ValidateNotNull()]
-        [AllowEmptyCollection()]
-        [System.Security.Cryptography.X509Certificates.X509Certificate2[]]
-        $NewCertificate = @(),
 
         [switch]
         $UseLegacyPadding,
@@ -527,6 +556,16 @@ function Add-ProtectedDataCredential
 
     begin
     {
+        if ($PSBoundParameters.ContainsKey('CertificateThumbprint'))
+        {
+            Write-Warning 'The -CertificateThumbprint parameter is now deprecated.  Use the -Certificate parameter instead.  You can pass a thumbprint to the -Certificate parameter.'
+        }
+
+        if ($PSBoundParameters.ContainsKey('NewCertificateThumbprint'))
+        {
+            Write-Warning 'The -NewCertificateThumbprint parameter is now deprecated.  Use the -NewCertificate parameter instead.  You can pass a thumbprint to the -NewCertificate parameter.'
+        }
+
         $decryptionCert = $null
 
         if ($PSCmdlet.ParameterSetName -eq 'Thumbprint')
@@ -551,8 +590,10 @@ function Add-ProtectedDataCredential
         {
             try
             {
+                $decryptionCert = ConvertTo-X509Certificate2 -InputObject $Certificate -ErrorAction Stop
+
                 $params = @{
-                    CertificateGroup = $Certificate
+                    CertificateGroup = $decryptionCert
                     SkipCertificateVerification = $SkipCertificateVerification
                     RequirePrivateKey = $true
                 }
@@ -586,7 +627,21 @@ function Add-ProtectedDataCredential
 
             foreach ($cert in $NewCertificate)
             {
-                ValidateKeyEncryptionCertificate -CertificateGroup $cert -SkipCertificateVerification:$SkipCertificateVerification
+                try
+                {
+                    $x509Cert = ConvertTo-X509Certificate2 -InputObject $cert -ErrorAction Stop
+
+                    $params = @{
+                        CertificateGroup = $x509Cert
+                        SkipCertificateVerification = $SkipCertificateVerification
+                    }
+
+                    ValidateKeyEncryptionCertificate @params -ErrorAction Stop
+                }
+                catch
+                {
+                    Write-Error -ErrorRecord $_
+                }
             }
         )
 
@@ -650,9 +705,9 @@ function Remove-ProtectedDataCredential
     .PARAMETER InputObject
        The ProtectedData object which is to be modified.
     .PARAMETER CertificateThumbprint
-       Thumbprints of the certificates that you wish to remove from this ProtectedData object.
+       This parameter has been deprecated, and will eventually be removed.  You can now pass certificate thumbprints to the -Certificate parameter instead.
     .PARAMETER Certificate
-       X509Certificate2 objects that you wish to remove from this ProtectedData object.
+       RSA or ECDH certificates that you wish to remove from this ProtectedData object.  You can pass an X509Certificate2 object to this parameter, or you can pass in a string which contains either a path to a certificate file on the file system, a path to the certificate in the Certificate provider, or a certificate thumbprint (in which case the certificate provider will be searched to find the certificate.)
     .PARAMETER Password
        Passwords in SecureString form which are to be removed from this ProtectedData object.
     .PARAMETER Passthru
@@ -691,6 +746,11 @@ function Remove-ProtectedDataCredential
 
         [ValidateNotNull()]
         [AllowEmptyCollection()]
+        [object[]]
+        $Certificate,
+
+        [ValidateNotNull()]
+        [AllowEmptyCollection()]
         [ValidateScript({
             if ($_ -notmatch '^[A-F\d]+$')
             {
@@ -704,11 +764,6 @@ function Remove-ProtectedDataCredential
 
         [ValidateNotNull()]
         [AllowEmptyCollection()]
-        [System.Security.Cryptography.X509Certificates.X509Certificate2[]]
-        $Certificate,
-
-        [ValidateNotNull()]
-        [AllowEmptyCollection()]
         [System.Security.SecureString[]]
         $Password,
 
@@ -718,8 +773,20 @@ function Remove-ProtectedDataCredential
 
     begin
     {
-        $thumbprints = $CertificateThumbprint + ($Certificate | Select-Object -ExpandProperty Thumbprint) |
-                       Get-Unique
+        if ($PSBoundParameters.ContainsKey('CertificateThumbprint'))
+        {
+            Write-Warning 'The -CertificateThumbprint parameter is now deprecated.  Use the -Certificate parameter instead.  You can pass a thumbprint to the -Certificate parameter, if you like.'
+        }
+
+        $thumbprints = @(
+            $CertificateThumbprint
+
+            $Certificate |
+            ConvertTo-X509Certificate2 |
+            Select-Object -ExpandProperty Thumbprint
+        )
+
+        $thumbprints = $thumbprints | Get-Unique
     }
 
     process
@@ -857,8 +924,7 @@ function Get-KeyEncryptionCertificate
         $ErrorActionPreference = $IgnoreError
     }
 
-    $certGroups = Get-ChildItem -Path $Path -Recurse -Include $CertificateThumbprint -ErrorAction $IgnoreError |
-                  Where-Object { $_ -is [System.Security.Cryptography.X509Certificates.X509Certificate2] } |
+    $certGroups = GetCertificateByThumbprint -Path $Path -Thumbprint $CertificateThumbprint -ErrorAction $IgnoreError |
                   Group-Object -Property Thumbprint
 
     if ($null -eq $certGroups)
@@ -881,6 +947,92 @@ function Get-KeyEncryptionCertificate
 #endregion
 
 #region Helper functions
+
+function ConvertTo-X509Certificate2
+{
+    [CmdletBinding()]
+    [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
+    param (
+        [Parameter(ValueFromPipeline = $true)]
+        [object[]] $InputObject = @()
+    )
+
+    process
+    {
+        foreach ($object in $InputObject)
+        {
+            if ($null -eq $object) { continue }
+
+            $possibleCerts = @(
+                $object -as [System.Security.Cryptography.X509Certificates.X509Certificate2]
+                GetCertificateFromPSPath -Path $object
+            ) -ne $null
+
+            if ($object -match '^[A-F\d]+$' -and $possibleCerts.Count -eq 0)
+            {
+                $possibleCerts = @(GetCertificateByThumbprint -Thumbprint $object)
+            }
+
+            $cert = $possibleCerts | Select-Object -First 1
+
+            if ($null -ne $cert)
+            {
+                $cert
+            }
+            else
+            {
+                Write-Error "No certificate with identifier '$object' of type $($object.GetType().FullName) was found."
+            }
+        }
+    }
+}
+
+function GetCertificateFromPSPath
+{
+    [CmdletBinding()]
+    [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string] $Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    $resolved = Resolve-Path -LiteralPath $Path
+
+    switch ($resolved.Provider.Name)
+    {
+        'FileSystem'
+        {
+            # X509Certificate2 has a constructor that takes a fileName string; using the -as operator is faster than
+            # New-Object, and works just as well.
+
+            return $resolved.ProviderPath -as [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        }
+
+        'Certificate'
+        {
+            return (Get-Item -LiteralPath $Path) -as [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        }
+    }
+}
+
+function GetCertificateByThumbprint
+{
+    [CmdletBinding()]
+    [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string] $Thumbprint,
+
+        [ValidateNotNullOrEmpty()]
+        [string]
+        $Path = 'Cert:\'
+    )
+
+    return Get-ChildItem -Path $Path -Recurse -Include $Thumbprint |
+           Where-Object { $_ -is [System.Security.Cryptography.X509Certificates.X509Certificate2] } |
+           Sort-Object -Property HasPrivateKey -Descending
+}
 
 function Protect-DataWithAes
 {

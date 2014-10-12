@@ -54,7 +54,7 @@ Describe 'Password-based encryption and decryption' {
         }
 
         It 'Adds a new password to an existing object' {
-            { Add-ProtectedDataCredential -InputObject $protected -Password $passwordForEncryption -NewPassword $wrongPassword } | 
+            { Add-ProtectedDataCredential -InputObject $protected -Password $passwordForEncryption -NewPassword $wrongPassword } |
             Should Not Throw
         }
 
@@ -172,47 +172,77 @@ Describe 'Certificate-based encryption and decryption (By thumbprint)' {
         }
     }
 
+    Context 'Legacy CertificateThumbprint parameter' {
+        Mock Write-Warning -ModuleName ProtectedData { }
+
+        $hash = @{}
+
+        It 'Encrypts data with the -CertificateThumbprint parameter' {
+            {$hash['Protected'] = Protect-Data -InputObject $stringToEncrypt -CertificateThumbprint $certThumbprint -SkipCertificateVerification} |
+            Should Not Throw
+        }
+
+        It 'Decrypts data with the -CertificateThumbprint parameter' {
+            Unprotect-Data -InputObject $hash['Protected'] -CertificateThumbprint $certThumbprint -SkipCertificateVerification |
+            Should Be $stringToEncrypt
+        }
+
+        It 'Adds a new thumbprint' {
+            { Add-ProtectedDataCredential -InputObject $hash['Protected'] -CertificateThumbprint $certThumbprint -NewCertificateThumbprint $secondCertThumbprint -SkipCertificateVerification } |
+            Should Not Throw
+        }
+
+        It 'Decrypts data with the new thumbprint' {
+            Unprotect-Data -InputObject $hash['Protected'] -CertificateThumbprint $secondCertThumbprint -SkipCertificateVerification |
+            Should Be $stringToEncrypt
+        }
+
+        It 'Warns the user of the deprecated parameters' {
+            Assert-MockCalled Write-Warning -ModuleName ProtectedData -ParameterFilter { $Message -match '.*The -(New)?CertificateThumbprint parameter is now deprecated.*' }
+        }
+    }
+
     Context 'General Usage' {
         It 'Produces an error if a self-signed certificate is used, without the -SkipCertificateVerification switch' {
-            { $null = Protect-Data -InputObject $stringToEncrypt -CertificateThumbprint $certThumbprint -ErrorAction Stop } | Should Throw
+            { $null = Protect-Data -InputObject $stringToEncrypt -Certificate $certThumbprint -ErrorAction Stop } | Should Throw
         }
 
         It 'Does not produce an error when a self-signed certificate is used, if the -SkipCertificateVerification switch is also used.' {
-            { $null = Protect-Data -InputObject $stringToEncrypt -CertificateThumbprint $certThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
+            { $null = Protect-Data -InputObject $stringToEncrypt -Certificate $certThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
         }
 
-        $protected = Protect-Data -InputObject $stringToEncrypt -CertificateThumbprint $certThumbprint, $secondCertThumbprint -SkipCertificateVerification
+        $protected = Protect-Data -InputObject $stringToEncrypt -Certificate $certThumbprint, $secondCertThumbprint -SkipCertificateVerification
 
         It 'Produces an error if a decryption attempt with the wrong certificate is made.' {
-            { $null = Unprotect-Data -InputObject $protected -CertificateThumbprint $wrongCertThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Throw
+            { $null = Unprotect-Data -InputObject $protected -Certificate $wrongCertThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Throw
         }
 
         It 'Allows any of the specified certificates to be used during decryption (First thumbprint test)' {
-            { $null = Unprotect-Data -InputObject $protected -CertificateThumbprint $certThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
+            { $null = Unprotect-Data -InputObject $protected -Certificate $certThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
         }
 
         It 'Allows any of the specified certificates to be used during decryption (Second thumbprint test)' {
-            { $null = Unprotect-Data -InputObject $protected -CertificateThumbprint $secondCertThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
+            { $null = Unprotect-Data -InputObject $protected -Certificate $secondCertThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
         }
 
         It 'Adds a new certificate to an existing object' {
             $scriptBlock = {
-                Add-ProtectedDataCredential -InputObject $protected -CertificateThumbprint $secondCertThumbprint -NewCertificateThumbprint $wrongCertThumbprint -SkipCertificateVerification
+                Add-ProtectedDataCredential -InputObject $protected -Certificate $secondCertThumbprint -NewCertificate $wrongCertThumbprint -SkipCertificateVerification
             }
 
             $scriptBlock | Should Not Throw
         }
 
         It 'Allows the object to be decrypted with the new certificate' {
-            { $null = Unprotect-Data -InputObject $protected -CertificateThumbprint $wrongCertThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
+            { $null = Unprotect-Data -InputObject $protected -Certificate $wrongCertThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
         }
 
         It 'Removes a certificate from the object' {
-            { $null = Remove-ProtectedDataCredential -InputObject $protected -CertificateThumbprint $secondCertThumbprint } | Should Not Throw
+            { $null = Remove-ProtectedDataCredential -InputObject $protected -Certificate $secondCertThumbprint } | Should Not Throw
         }
 
         It 'No longer allows the data to be decrypted with the removed thumbprint' {
-            { $null = Unprotect-Data -InputObject $protected -CertificateThumbprint $secondCertThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Throw
+            { $null = Unprotect-Data -InputObject $protected -Certificate $secondCertThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Throw
         }
     }
 
@@ -220,7 +250,7 @@ Describe 'Certificate-based encryption and decryption (By thumbprint)' {
         $noKeyUsageThumbprint = New-TestCertificate -Subject $testCertificateSubject -NoKeyUsageExtension
 
         It 'Throws an error if a certificate does not contain a KeyUsage extension' {
-            $scriptBlock = { Get-KeyEncryptionCertificate -CertificateThumbprint $noKeyUsageThumbprint -SkipCertificateVerification -ErrorAction Stop }
+            $scriptBlock = { Get-KeyEncryptionCertificate -Certificate $noKeyUsageThumbprint -SkipCertificateVerification -ErrorAction Stop }
             $scriptBlock | Should Throw "Certificate '$noKeyUsageThumbprint' does not have the required KeyEncipherment Key Usage flag."
         }
     }
@@ -346,6 +376,66 @@ Describe 'Certificate-Based encryption and decryption (By certificate object)' {
 
         It 'Decrypts the byte array properly' {
             ($byteArrayToEncrypt.Length -eq $decrypted.Length -and (-join $byteArrayToEncrypt) -eq (-join $decrypted)) | Should Be $True
+        }
+    }
+}
+
+Describe 'Certificate-based encryption / decryption (by file system path)' {
+    $certFromFile = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$scriptRoot\TestCertificateFile.pfx", 'password')
+
+    $hash = @{}
+
+    It 'Encrypts data successfully with a relative filesystem path to a certificate file' {
+        [System.Environment]::CurrentDirectory = $HOME
+        Push-Location $scriptRoot
+
+        try
+        {
+            { $hash.ProtectedData = Protect-Data $stringToEncrypt -Certificate '.\TestCertificateFile.cer' -SkipCertificateVerification } |
+            Should Not Throw
+        }
+        finally
+        {
+            Pop-Location
+        }
+    }
+
+    It 'Decrypts the data successfully' {
+        Unprotect-Data -InputObject $hash.ProtectedData -Certificate $certFromFile -SkipCertificateVerification |
+        Should Be $stringToEncrypt
+    }
+}
+
+Describe 'Certificate-based encryption / decryption (by certificate path)' {
+    $testThumbprint = New-TestCertificate -Subject $testCertificateSubject
+
+    $hash = @{}
+
+    It 'Encrypts data successfully with a relative certificate provider path' {
+        Push-Location Cert:\CurrentUser\My
+
+        try
+        {
+            { $hash.ProtectedData = Protect-Data $stringToEncrypt -Certificate ".\$testThumbprint" -SkipCertificateVerification } |
+            Should Not Throw
+        }
+        finally
+        {
+            Pop-Location
+        }
+    }
+
+    It 'Decrypts the data successfully' {
+        Push-Location Cert:\CurrentUser\My
+
+        try
+        {
+            Unprotect-Data -InputObject $hash.ProtectedData -Certificate ".\$testThumbprint" -SkipCertificateVerification |
+            Should Be $stringToEncrypt
+        }
+        finally
+        {
+            Pop-Location
         }
     }
 }
