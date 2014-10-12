@@ -312,7 +312,7 @@ function Unprotect-Data
         $CertificateThumbprint,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
-        [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        [object]
         $Certificate,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Password')]
@@ -350,12 +350,12 @@ function Unprotect-Data
             try
             {
                 $params = @{
-                    CertificateGroup = $Certificate
                     RequirePrivateKey = $true
                     SkipCertificateVerification = $SkipCertificateVerification
                 }
 
-                $cert = ValidateKeyEncryptionCertificate @params -ErrorAction Stop
+                $cert = ConvertTo-X509Certificate2 -InputObject $Certificate
+                $cert = ValidateKeyEncryptionCertificate -CertificateGroup $cert @params -ErrorAction Stop
             }
             catch
             {
@@ -865,8 +865,7 @@ function Get-KeyEncryptionCertificate
         $ErrorActionPreference = $IgnoreError
     }
 
-    $certGroups = Get-ChildItem -Path $Path -Recurse -Include $CertificateThumbprint -ErrorAction $IgnoreError |
-                  Where-Object { $_ -is [System.Security.Cryptography.X509Certificates.X509Certificate2] } |
+    $certGroups = GetCertificateByThumbprint -Path $Path -Thumbprint $CertificateThumbprint -ErrorAction $IgnoreError |
                   Group-Object -Property Thumbprint
 
     if ($null -eq $certGroups)
@@ -901,8 +900,13 @@ function ConvertTo-X509Certificate2
 
     $possibleCerts = @(
         $InputObject -as [System.Security.Cryptography.X509Certificates.X509Certificate2]
+
         GetCertificateFromPSPath -Path $InputObject
-        GetCertificateByThumbprint -Thumbprint $InputObject
+
+        if ($InputObject -match '^[A-F\d]+$')
+        {
+            GetCertificateByThumbprint -Thumbprint $InputObject
+        }
     ) -ne $null
 
     $cert = $possibleCerts | Select-Object -First 1
@@ -952,15 +956,16 @@ function GetCertificateByThumbprint
     [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
     param (
         [Parameter(Mandatory = $true)]
-        [string] $Thumbprint
+        [string] $Thumbprint,
+
+        [ValidateNotNullOrEmpty()]
+        [string]
+        $Path = 'Cert:\'
     )
 
-    if ($Thumbprint -notmatch '^[A-F\d]+$') { return }
-
-    return Get-ChildItem -Path Cert:\ -Recurse -Include $Thumbprint |
+    return Get-ChildItem -Path $Path -Recurse -Include $Thumbprint |
            Where-Object { $_ -is [System.Security.Cryptography.X509Certificates.X509Certificate2] } |
-           Sort-Object -Property HasPrivateKey -Descending |
-           Select-Object -First 1
+           Sort-Object -Property HasPrivateKey -Descending
 }
 
 function Protect-DataWithAes
