@@ -108,7 +108,7 @@ function Protect-Data
 
         [ValidateNotNullOrEmpty()]
         [AllowEmptyCollection()]
-        [System.Security.Cryptography.X509Certificates.X509Certificate2[]]
+        [object[]]
         $Certificate = @(),
 
         [switch]
@@ -158,7 +158,15 @@ function Protect-Data
 
             foreach ($cert in $Certificate)
             {
-                ValidateKeyEncryptionCertificate -CertificateGroup $cert -SkipCertificateVerification:$SkipCertificateVerification
+                try
+                {
+                    $x509Cert = ConvertTo-X509Certificate2 -InputObject $cert
+                    ValidateKeyEncryptionCertificate -CertificateGroup $x509Cert -SkipCertificateVerification:$SkipCertificateVerification
+                }
+                catch
+                {
+                    Write-Error -ErrorRecord $_
+                }
             }
         )
 
@@ -881,6 +889,79 @@ function Get-KeyEncryptionCertificate
 #endregion
 
 #region Helper functions
+
+function ConvertTo-X509Certificate2
+{
+    [CmdletBinding()]
+    [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
+    param (
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+        [object] $InputObject
+    )
+
+    $possibleCerts = @(
+        $InputObject -as [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        GetCertificateFromPSPath -Path $InputObject
+        GetCertificateByThumbprint -Thumbprint $InputObject
+    ) -ne $null
+
+    $cert = $possibleCerts | Select-Object -First 1
+
+    if ($null -ne $cert)
+    {
+        return $cert
+    }
+    else
+    {
+        throw "No certificate with identifier '$InputObject' of type $($InputObject.GetType().FullName) was found."
+    }
+}
+
+function GetCertificateFromPSPath
+{
+    [CmdletBinding()]
+    [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string] $Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    $resolved = Resolve-Path -LiteralPath $Path
+
+    switch ($resolved.Provider.Name)
+    {
+        'FileSystem'
+        {
+            # X509Certificate2 has a constructor that takes a fileName string; using the -as operator is faster than
+            # New-Object, and works just as well.
+
+            return $resolved.ProviderPath -as [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        }
+
+        'Certificate'
+        {
+            return (Get-Item -LiteralPath $Path) -as [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        }
+    }
+}
+
+function GetCertificateByThumbprint
+{
+    [CmdletBinding()]
+    [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string] $Thumbprint
+    )
+
+    if ($Thumbprint -notmatch '^[A-F\d]+$') { return }
+
+    return Get-ChildItem -Path Cert:\ -Recurse -Include $Thumbprint |
+           Where-Object { $_ -is [System.Security.Cryptography.X509Certificates.X509Certificate2] } |
+           Sort-Object -Property HasPrivateKey -Descending |
+           Select-Object -First 1
+}
 
 function Protect-DataWithAes
 {

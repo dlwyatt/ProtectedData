@@ -376,7 +376,7 @@ Describe 'Certificate-based encryption / decryption (by file system path)' {
     }
 }
 
-Describe 'Certificate-based encryption / decryption (by file system path)' {
+Describe 'Certificate-based encryption / decryption (by certificate path)' {
     $testThumbprint = New-TestCertificate -Subject $testCertificateSubject
 
     $hash = @{}
@@ -400,7 +400,7 @@ Describe 'Certificate-based encryption / decryption (by file system path)' {
 
         try
         {
-            Unprotect-Data -InputObject $hash.ProtectedData -Certificate $certFromFile -SkipCertificateVerification |
+            Unprotect-Data -InputObject $hash.ProtectedData -Certificate ".\$testThumbprint" -SkipCertificateVerification |
             Should Be $stringToEncrypt
         }
         finally
