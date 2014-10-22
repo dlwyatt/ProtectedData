@@ -537,7 +537,7 @@ Describe 'ECDH Certificates' {
 
         $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification
 
-        It 'Decrypts data successfully using an ECDH certificate' {
+        It 'Decrypts data successfully using an ECDH_P521 certificate' {
             Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification |
             Should Be $stringToEncrypt
         }
