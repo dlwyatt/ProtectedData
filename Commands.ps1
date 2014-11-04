@@ -30,8 +30,6 @@ function Protect-Data
        If certificates are used, they must be installed in either the local computer or local user's certificate stores, and the certificates' Key Usage extension must allow Key Encipherment (for RSA) or Key Agreement (for ECDH). The private keys are not required for Protect-Data.
     .PARAMETER InputObject
        The object that is to be encrypted. The object must be of one of the types returned by the Get-ProtectedDataSupportedTypes command.
-    .PARAMETER CertificateThumbprint
-       This parameter has been deprecated, and will eventually be removed.  You can now pass certificate thumbprints to the -Certificate parameter instead.
     .PARAMETER Certificate
        Zero or more RSA or ECDH certificates that should be used to encrypt the data. The data can later be decrypted by using the same certificate (with its private key.)  You can pass an X509Certificate2 object to this parameter, or you can pass in a string which contains either a path to a certificate file on the file system, a path to the certificate in the Certificate provider, or a certificate thumbprint (in which case the certificate provider will be searched to find the certificate.)
     .PARAMETER UseLegacyPadding
@@ -98,19 +96,6 @@ function Protect-Data
         [object[]]
         $Certificate = @(),
 
-        [ValidateNotNullOrEmpty()]
-        [AllowEmptyCollection()]
-        [ValidateScript({
-            if ($_ -notmatch '^[A-F\d]+$')
-            {
-                throw 'Certificate thumbprints must only contain hexadecimal digits (0-9 and letters A-F).'
-            }
-
-            return $true
-        })]
-        [string[]]
-        $CertificateThumbprint = @(),
-
         [switch]
         $UseLegacyPadding,
 
@@ -137,30 +122,7 @@ function Protect-Data
 
     begin
     {
-        if ($PSBoundParameters.ContainsKey('CertificateThumbprint'))
-        {
-            Write-Warning 'The -CertificateThumbprint parameter is now deprecated.  Use the -Certificate parameter instead.  You can pass a thumbprint to the -Certificate parameter.'
-        }
-
         $certs = @(
-            foreach ($thumbprint in $CertificateThumbprint)
-            {
-                try
-                {
-                    $params = @{
-                        CertificateThumbprint = $thumbprint
-                        SkipCertificateVerification = $SkipCertificateVerification
-                        ErrorAction = 'Stop'
-                    }
-                    Get-KeyEncryptionCertificate @params |
-                    Select-Object -First 1
-                }
-                catch
-                {
-                    Write-Error -ErrorRecord $_
-                }
-            }
-
             foreach ($cert in $Certificate)
             {
                 try
@@ -250,8 +212,6 @@ function Unprotect-Data
        Decrypts an object that was produced by the Protect-Data command. If a Certificate is used to perform the decryption, it must be installed in either the local computer or current user's certificate stores (with its private key), and the current user must have permission to use that key.
     .PARAMETER InputObject
        The ProtectedData object that is to be decrypted.
-    .PARAMETER CertificateThumbprint
-       This parameter has been deprecated, and will eventually be removed.  You can now pass certificate thumbprints to the -Certificate parameter instead.
     .PARAMETER Certificate
        An RSA or ECDH certificate that will be used to decrypt the data.  You must have the certificate's private key, and it must be one of the certificates that was used to encrypt the data.  You can pass an X509Certificate2 object to this parameter, or you can pass in a string which contains either a path to a certificate file on the file system, a path to the certificate in the Certificate provider, or a certificate thumbprint (in which case the certificate provider will be searched to find the certificate.)
     .PARAMETER Password
@@ -259,10 +219,6 @@ function Unprotect-Data
     .PARAMETER SkipCertificateValidation
        If specified, the command does not attempt to validate that the specified certificate(s) came from trusted publishers and have not been revoked or expired.
        This is primarily intended to allow the use of self-signed certificates.
-    .EXAMPLE
-       $decryptedObject = Unprotect-Data -InputObject $encryptedObject -CertificateThumbprint CB04E7C885BEAE441B39BC843C85855D97785D25
-
-       Decrypts the contents of $encryptedObject and outputs either a String or SecureString (depending on what was originally encrypted.)
     .EXAMPLE
        $decryptedObject = $encryptedObject | Unprotect-Data -Password (Read-Host -AsSecureString -Prompt 'Enter password to decrypt the data')
 
@@ -315,18 +271,6 @@ function Unprotect-Data
         [object]
         $Certificate,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Thumbprint')]
-        [ValidateScript({
-            if ($_ -notmatch '^[A-F\d]+$')
-            {
-                throw 'Certificate thumbprints must only contain hexadecimal digits (0-9 and letters A-F).'
-            }
-
-            return $true
-        })]
-        [string]
-        $CertificateThumbprint,
-
         [Parameter(Mandatory = $true, ParameterSetName = 'Password')]
         [System.Security.SecureString]
         $Password,
@@ -337,32 +281,9 @@ function Unprotect-Data
 
     begin
     {
-        if ($PSBoundParameters.ContainsKey('CertificateThumbprint'))
-        {
-            Write-Warning 'The -CertificateThumbprint parameter is now deprecated.  Use the -Certificate parameter instead.  You can pass a thumbprint to the -Certificate parameter.'
-        }
-
         $cert = $null
 
-        if ($CertificateThumbprint)
-        {
-            try
-            {
-                $params = @{
-                    CertificateThumbprint = $CertificateThumbprint
-                    RequirePrivateKey = $true
-                    SkipCertificateVerification = $SkipCertificateVerification
-                }
-
-                $cert = Get-KeyEncryptionCertificate @params -ErrorAction Stop |
-                        Select-Object -First 1
-            }
-            catch
-            {
-                throw
-            }
-        }
-        elseif ($Certificate)
+        if ($Certificate)
         {
             try
             {
@@ -434,16 +355,10 @@ function Add-ProtectedDataCredential
        This command can be used to add new certificates and/or passwords to an object that was previously encrypted by Protect-Data. The caller must provide one of the certificates or passwords that already exists in the ProtectedData object to perform this operation.
     .PARAMETER InputObject
        The ProtectedData object which was created by an earlier call to Protect-Data.
-    .PARAMETER CertificateThumbprint
-       This parameter has been deprecated, and will eventually be removed.  You can now pass certificate thumbprints to the -Certificate parameter instead.
-       The thumbprint of a certificate which was previously used to encrypt the ProtectedData structure's key. You must have the certificate's private key.  You can pass an X509Certificate2 object to this parameter, or you can pass in a string which contains either a path to a certificate file on the file system, a path to the certificate in the Certificate provider, or a certificate thumbprint (in which case the certificate provider will be searched to find the certificate.)
     .PARAMETER Certificate
        An RSA or ECDH certificate which was previously used to encrypt the ProtectedData structure's key.
     .PARAMETER Password
        A password which was previously used to encrypt the ProtectedData structure's key.
-    .PARAMETER NewCertificateThumbprint
-       This parameter has been deprecated, and will eventually be removed.  You can now pass certificate thumbprints to the -NewCertificate parameter instead.
-       Zero or more certificate thumbprints that should be used to encrypt the data. The certificates must be installed in the local computer or current user's certificate stores, and must be RSA or ECDH certificates. The data can later be decrypted by using the same certificate (with its private key.)
     .PARAMETER NewCertificate
        Zero or more RSA or ECDH certificates that should be used to encrypt the data. The data can later be decrypted by using the same certificate (with its private key.)  You can pass an X509Certificate2 object to this parameter, or you can pass in a string which contains either a path to a certificate file on the file system, a path to the certificate in the Certificate provider, or a certificate thumbprint (in which case the certificate provider will be searched to find the certificate.)
     .PARAMETER UseLegacyPadding
@@ -459,7 +374,7 @@ function Add-ProtectedDataCredential
     .PARAMETER Passthru
        If this switch is used, the ProtectedData object is output to the pipeline after it is modified.
     .EXAMPLE
-       Add-ProtectedDataCredential -InputObject $protectedData -CertificateThumbprint $oldThumbprint -NewCertificateThumbprint $newThumbprints -NewPassword $newPasswords
+       Add-ProtectedDataCredential -InputObject $protectedData -Certificate $oldThumbprint -NewCertificate $newThumbprints -NewPassword $newPasswords
 
        Uses the certificate with thumbprint $oldThumbprint to add new key copies to the $protectedData object. $newThumbprints would be a string array containing thumbprints, and $newPasswords would be an array of SecureString objects.
     .INPUTS
@@ -496,20 +411,7 @@ function Add-ProtectedDataCredential
         [object]
         $Certificate,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Thumbprint')]
-        [ValidateScript({
-            if ($_ -notmatch '^[A-F\d]+$')
-            {
-                throw 'Certificate thumbprints must only contain hexadecimal digits (0-9 and letters A-F).'
-            }
-
-            return $true
-        })]
-        [string]
-        $CertificateThumbprint,
-
         [Parameter(ParameterSetName = 'Certificate')]
-        [Parameter(ParameterSetName = 'Thumbprint')]
         [switch]
         $UseLegacyPaddingForDecryption,
 
@@ -521,19 +423,6 @@ function Add-ProtectedDataCredential
         [AllowEmptyCollection()]
         [object[]]
         $NewCertificate = @(),
-
-        [ValidateNotNullOrEmpty()]
-        [AllowEmptyCollection()]
-        [ValidateScript({
-            if ($_ -notmatch '^[A-F\d]+$')
-            {
-                throw 'Certificate thumbprints must only contain hexadecimal digits (0-9 and letters A-F).'
-            }
-
-            return $true
-        })]
-        [string[]]
-        $NewCertificateThumbprint = @(),
 
         [switch]
         $UseLegacyPadding,
@@ -556,37 +445,9 @@ function Add-ProtectedDataCredential
 
     begin
     {
-        if ($PSBoundParameters.ContainsKey('CertificateThumbprint'))
-        {
-            Write-Warning 'The -CertificateThumbprint parameter is now deprecated.  Use the -Certificate parameter instead.  You can pass a thumbprint to the -Certificate parameter.'
-        }
-
-        if ($PSBoundParameters.ContainsKey('NewCertificateThumbprint'))
-        {
-            Write-Warning 'The -NewCertificateThumbprint parameter is now deprecated.  Use the -NewCertificate parameter instead.  You can pass a thumbprint to the -NewCertificate parameter.'
-        }
-
         $decryptionCert = $null
 
-        if ($PSCmdlet.ParameterSetName -eq 'Thumbprint')
-        {
-            try
-            {
-                $params = @{
-                    CertificateThumbprint = $CertificateThumbprint
-                    SkipCertificateVerification = $SkipCertificateVerification
-                    RequirePrivateKey = $true
-                }
-
-                $decryptionCert = Get-KeyEncryptionCertificate @params -ErrorAction Stop |
-                                  Select-Object -First 1
-            }
-            catch
-            {
-                throw
-            }
-        }
-        elseif ($PSCmdlet.ParameterSetName -eq 'Certificate')
+        if ($PSCmdlet.ParameterSetName -eq 'Certificate')
         {
             try
             {
@@ -607,24 +468,6 @@ function Add-ProtectedDataCredential
         }
 
         $certs = @(
-            foreach ($thumbprint in $NewCertificateThumbprint)
-            {
-                try
-                {
-                    $params = @{
-                        CertificateThumbprint = $thumbprint
-                        SkipCertificateVerification = $SkipCertificateVerification
-                        ErrorAction = 'Stop'
-                    }
-                    Get-KeyEncryptionCertificate @params |
-                    Select-Object -First 1
-                }
-                catch
-                {
-                    Write-Error -ErrorRecord $_
-                }
-            }
-
             foreach ($cert in $NewCertificate)
             {
                 try
@@ -704,8 +547,6 @@ function Remove-ProtectedDataCredential
        The KeyData copies in a ProtectedData object which are associated with the specified Certificates and/or Passwords are removed from the object, unless that removal would leave no KeyData copies behind.
     .PARAMETER InputObject
        The ProtectedData object which is to be modified.
-    .PARAMETER CertificateThumbprint
-       This parameter has been deprecated, and will eventually be removed.  You can now pass certificate thumbprints to the -Certificate parameter instead.
     .PARAMETER Certificate
        RSA or ECDH certificates that you wish to remove from this ProtectedData object.  You can pass an X509Certificate2 object to this parameter, or you can pass in a string which contains either a path to a certificate file on the file system, a path to the certificate in the Certificate provider, or a certificate thumbprint (in which case the certificate provider will be searched to find the certificate.)
     .PARAMETER Password
@@ -713,7 +554,7 @@ function Remove-ProtectedDataCredential
     .PARAMETER Passthru
        If this switch is used, the ProtectedData object will be written to the pipeline after processing is complete.
     .EXAMPLE
-       $protectedData | Remove-ProtectedDataCredential -CertificateThumbprint $thumbprints -Password $passwords
+       $protectedData | Remove-ProtectedDataCredential -Certificate $thumbprints -Password $passwords
 
        Removes certificates and passwords from an existing ProtectedData object.
     .INPUTS
@@ -751,19 +592,6 @@ function Remove-ProtectedDataCredential
 
         [ValidateNotNull()]
         [AllowEmptyCollection()]
-        [ValidateScript({
-            if ($_ -notmatch '^[A-F\d]+$')
-            {
-                throw 'Certificate thumbprints must only contain hexadecimal digits (0-9 and letters A-F).'
-            }
-
-            return $true
-        })]
-        [string[]]
-        $CertificateThumbprint,
-
-        [ValidateNotNull()]
-        [AllowEmptyCollection()]
         [System.Security.SecureString[]]
         $Password,
 
@@ -773,14 +601,7 @@ function Remove-ProtectedDataCredential
 
     begin
     {
-        if ($PSBoundParameters.ContainsKey('CertificateThumbprint'))
-        {
-            Write-Warning 'The -CertificateThumbprint parameter is now deprecated.  Use the -Certificate parameter instead.  You can pass a thumbprint to the -Certificate parameter, if you like.'
-        }
-
         $thumbprints = @(
-            $CertificateThumbprint
-
             $Certificate |
             ConvertTo-X509Certificate2 |
             Select-Object -ExpandProperty Thumbprint

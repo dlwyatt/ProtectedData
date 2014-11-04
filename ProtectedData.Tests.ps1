@@ -172,36 +172,6 @@ Describe 'Certificate-based encryption and decryption (By thumbprint)' {
         }
     }
 
-    Context 'Legacy CertificateThumbprint parameter' {
-        Mock Write-Warning -ModuleName ProtectedData { }
-
-        $hash = @{}
-
-        It 'Encrypts data with the -CertificateThumbprint parameter' {
-            {$hash['Protected'] = Protect-Data -InputObject $stringToEncrypt -CertificateThumbprint $certThumbprint -SkipCertificateVerification} |
-            Should Not Throw
-        }
-
-        It 'Decrypts data with the -CertificateThumbprint parameter' {
-            Unprotect-Data -InputObject $hash['Protected'] -CertificateThumbprint $certThumbprint -SkipCertificateVerification |
-            Should Be $stringToEncrypt
-        }
-
-        It 'Adds a new thumbprint' {
-            { Add-ProtectedDataCredential -InputObject $hash['Protected'] -CertificateThumbprint $certThumbprint -NewCertificateThumbprint $secondCertThumbprint -SkipCertificateVerification } |
-            Should Not Throw
-        }
-
-        It 'Decrypts data with the new thumbprint' {
-            Unprotect-Data -InputObject $hash['Protected'] -CertificateThumbprint $secondCertThumbprint -SkipCertificateVerification |
-            Should Be $stringToEncrypt
-        }
-
-        It 'Warns the user of the deprecated parameters' {
-            Assert-MockCalled Write-Warning -ModuleName ProtectedData -ParameterFilter { $Message -match '.*The -(New)?CertificateThumbprint parameter is now deprecated.*' }
-        }
-    }
-
     Context 'General Usage' {
         It 'Produces an error if a self-signed certificate is used, without the -SkipCertificateVerification switch' {
             { $null = Protect-Data -InputObject $stringToEncrypt -Certificate $certThumbprint -ErrorAction Stop } | Should Throw
