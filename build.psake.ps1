@@ -1,4 +1,4 @@
-Task default -depends Build
+Task default -depends Build,Sign
 
 Properties {
     $source = $psake.build_script_dir
