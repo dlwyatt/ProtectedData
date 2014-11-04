@@ -8,7 +8,7 @@
 
 @{
     ModuleToProcess        = 'ProtectedData.psm1'
-    ModuleVersion          = '3.0'
+    ModuleVersion          = '3.0.1'
     GUID                   = 'fc6a2f6a-563d-422a-85b5-9638e45a370e'
     Author                 = 'Dave Wyatt'
     CompanyName            = 'Home'
@@ -37,7 +37,7 @@
             # Indicates this is a pre-release/testing version of the module.
             IsPrerelease = 'False'
 
-            ReleaseNotes = 'Removed deprecated CertificateThumbprint parameters in favor of using Certificate'
+            ReleaseNotes = 'Added digital signature to release.'
         }
     }
 }
