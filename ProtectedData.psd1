@@ -8,7 +8,7 @@
 
 @{
     ModuleToProcess        = 'ProtectedData.psm1'
-    ModuleVersion          = '3.0.1'
+    ModuleVersion          = '4.0.0'
     GUID                   = 'fc6a2f6a-563d-422a-85b5-9638e45a370e'
     Author                 = 'Dave Wyatt'
     CompanyName            = 'Home'
@@ -18,7 +18,7 @@
     DotNetFrameworkVersion = '3.5'
     FunctionsToExport      = 'Protect-Data', 'Unprotect-Data', 'Get-ProtectedDataSupportedTypes',
                              'Add-ProtectedDataCredential', 'Remove-ProtectedDataCredential',
-                             'Get-KeyEncryptionCertificate'
+                             'Get-KeyEncryptionCertificate', 'Add-ProtectedDataHmac'
 
     PrivateData = @{
         PSData = @{
@@ -37,7 +37,7 @@
             # Indicates this is a pre-release/testing version of the module.
             IsPrerelease = 'False'
 
-            ReleaseNotes = 'Added digital signature to release.'
+            ReleaseNotes = 'Added HMAC authentication of AES data.'
         }
     }
 }

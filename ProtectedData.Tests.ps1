@@ -54,16 +54,16 @@ Describe 'Password-based encryption and decryption' {
         }
 
         It 'Adds a new password to an existing object' {
-            { Add-ProtectedDataCredential -InputObject $protected -Password $passwordForEncryption -NewPassword $wrongPassword } |
+            { Add-ProtectedDataCredential -InputObject $protected -Password $passwordForEncryption -NewPassword $wrongPassword -ErrorAction Stop } |
             Should Not Throw
         }
 
         It 'Allows the object to be decrypted with the new password' {
-            { $null = Unprotect-Data -InputObject $protected -Password $wrongPassword } | Should Not Throw
+            { $null = Unprotect-Data -InputObject $protected -Password $wrongPassword -ErrorAction Stop } | Should Not Throw
         }
 
         It 'Removes a password from the object' {
-            { $null = Remove-ProtectedDataCredential -InputObject $protected -Password $secondPassword } | Should Not Throw
+            { $null = Remove-ProtectedDataCredential -InputObject $protected -Password $secondPassword -ErrorAction Stop } | Should Not Throw
         }
 
         It 'No longer allows the data to be decrypted with the removed password' {
@@ -173,55 +173,10 @@ Describe 'Certificate-based encryption and decryption (By thumbprint)' {
     }
 
     Context 'General Usage' {
-        It 'Produces an error if a self-signed certificate is used, without the -SkipCertificateVerification switch' {
-            { $null = Protect-Data -InputObject $stringToEncrypt -Certificate $certThumbprint -ErrorAction Stop } | Should Throw
-        }
+        $protected = Protect-Data -InputObject $stringToEncrypt -Certificate $certThumbprint -SkipCertificateVerification
 
-        It 'Does not produce an error when a self-signed certificate is used, if the -SkipCertificateVerification switch is also used.' {
-            { $null = Protect-Data -InputObject $stringToEncrypt -Certificate $certThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
-        }
-
-        $protected = Protect-Data -InputObject $stringToEncrypt -Certificate $certThumbprint, $secondCertThumbprint -SkipCertificateVerification
-
-        It 'Produces an error if a decryption attempt with the wrong certificate is made.' {
-            { $null = Unprotect-Data -InputObject $protected -Certificate $wrongCertThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Throw
-        }
-
-        It 'Allows any of the specified certificates to be used during decryption (First thumbprint test)' {
-            { $null = Unprotect-Data -InputObject $protected -Certificate $certThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
-        }
-
-        It 'Allows any of the specified certificates to be used during decryption (Second thumbprint test)' {
-            { $null = Unprotect-Data -InputObject $protected -Certificate $secondCertThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
-        }
-
-        It 'Adds a new certificate to an existing object' {
-            $scriptBlock = {
-                Add-ProtectedDataCredential -InputObject $protected -Certificate $secondCertThumbprint -NewCertificate $wrongCertThumbprint -SkipCertificateVerification
-            }
-
-            $scriptBlock | Should Not Throw
-        }
-
-        It 'Allows the object to be decrypted with the new certificate' {
-            { $null = Unprotect-Data -InputObject $protected -Certificate $wrongCertThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
-        }
-
-        It 'Removes a certificate from the object' {
-            { $null = Remove-ProtectedDataCredential -InputObject $protected -Certificate $secondCertThumbprint } | Should Not Throw
-        }
-
-        It 'No longer allows the data to be decrypted with the removed thumbprint' {
-            { $null = Unprotect-Data -InputObject $protected -Certificate $secondCertThumbprint -SkipCertificateVerification -ErrorAction Stop } | Should Throw
-        }
-    }
-
-    Context 'Certificate with no Key Usage extension' {
-        $noKeyUsageThumbprint = New-TestCertificate -Subject $testCertificateSubject -NoKeyUsageExtension
-
-        It 'Throws an error if a certificate does not contain a KeyUsage extension' {
-            $scriptBlock = { Get-KeyEncryptionCertificate -Certificate $noKeyUsageThumbprint -SkipCertificateVerification -ErrorAction Stop }
-            $scriptBlock | Should Throw "Certificate '$noKeyUsageThumbprint' does not have the required KeyEncipherment Key Usage flag."
+        It 'Decrypts data successfully' {
+            Unprotect-Data -InputObject $protected -Certificate $certThumbprint -SkipCertificateVerification -ErrorAction Stop | Should Be $stringToEncrypt
         }
     }
 
@@ -258,7 +213,7 @@ Describe 'Certificate-Based encryption and decryption (By certificate object)' {
 
         It 'Adds a new certificate to an existing object' {
             $scriptBlock = {
-                Add-ProtectedDataCredential -InputObject $protected -Certificate $secondCertFromFile -NewCertificate $wrongCertFromFile -SkipCertificateVerification
+                Add-ProtectedDataCredential -InputObject $protected -Certificate $secondCertFromFile -NewCertificate $wrongCertFromFile -SkipCertificateVerification -ErrorAction Stop
             }
 
             $scriptBlock | Should Not Throw
@@ -269,7 +224,7 @@ Describe 'Certificate-Based encryption and decryption (By certificate object)' {
         }
 
         It 'Removes a certificate from the object' {
-            { $null = Remove-ProtectedDataCredential -InputObject $protected -Certificate $secondCertFromFile } | Should Not Throw
+            { $null = Remove-ProtectedDataCredential -InputObject $protected -Certificate $secondCertFromFile -ErrorAction Stop } | Should Not Throw
         }
 
         It 'No longer allows the data to be decrypted with the removed certificate' {
@@ -361,7 +316,7 @@ Describe 'Certificate-based encryption / decryption (by file system path)' {
 
         try
         {
-            { $hash.ProtectedData = Protect-Data $stringToEncrypt -Certificate '.\TestCertificateFile.cer' -SkipCertificateVerification } |
+            { $hash.ProtectedData = Protect-Data $stringToEncrypt -Certificate '.\TestCertificateFile.cer' -SkipCertificateVerification -ErrorAction Stop } |
             Should Not Throw
         }
         finally
@@ -386,7 +341,7 @@ Describe 'Certificate-based encryption / decryption (by certificate path)' {
 
         try
         {
-            { $hash.ProtectedData = Protect-Data $stringToEncrypt -Certificate ".\$testThumbprint" -SkipCertificateVerification } |
+            { $hash.ProtectedData = Protect-Data $stringToEncrypt -Certificate ".\$testThumbprint" -SkipCertificateVerification -ErrorAction Stop } |
             Should Not Throw
         }
         finally
@@ -410,6 +365,24 @@ Describe 'Certificate-based encryption / decryption (by certificate path)' {
     }
 }
 
+Describe 'HMAC authentication of AES data' {
+    $protectedData = $stringToEncrypt | Protect-Data -Password $passwordForEncryption
+
+    $cipherText = $protectedData.CipherText.Clone()
+
+    It 'Throws an error if the ciphertext has been modified' {
+        $protectedData.CipherText[0] = ($protectedData.CipherText[0] + 12) % 256
+        { $protectedData | Unprotect-Data -Password $passwordForEncryption -ErrorAction Stop } | Should Throw 'Decryption failed due to invalid HMAC.'
+    }
+
+    $protectedData.CipherText = $cipherText.Clone()
+
+    It 'Throws an error if the HMAC has been modified' {
+        $protectedData.HMAC[0] = ($protectedData.HMAC[0] + 12) % 256
+        { $protectedData | Unprotect-Data -Password $passwordForEncryption -ErrorAction Stop } | Should Throw 'Decryption failed due to invalid HMAC.'
+    }
+}
+
 Describe 'Legacy Padding Support' {
     $certFromFile = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$scriptRoot\TestCertificateFile.pfx", 'password')
     $stringToEncrypt = 'This is a test'
@@ -418,8 +391,18 @@ Describe 'Legacy Padding Support' {
         $protectedData = Import-Clixml -Path $scriptRoot\V1.0.ProtectedWithTestCertificateFile.pfx.xml
         Set-StrictMode -Version Latest
 
+        It 'Throws an error if the HMAC code is missing' {
+            $scriptBlock = { $protectedData | Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification -ErrorAction Stop }
+            $scriptBlock | Should Throw 'Input Object contained no HMAC code'
+        }
+
+        It 'Adds an HMAC to the legacy object' {
+            $protectedData | Add-ProtectedDataHmac -Certificate $certFromFile -SkipCertificateVerification
+            ,$protectedData.HMAC | Should Not BeNullOrEmpty
+        }
+
         It 'Unprotects the data properly even with strict mode enabled' {
-            { $protectedData | Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification } | Should Not Throw
+            { $protectedData | Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
             $protectedData | Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification | Should Be $stringToEncrypt
         }
     }
