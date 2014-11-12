@@ -37,7 +37,7 @@
             # Indicates this is a pre-release/testing version of the module.
             IsPrerelease = 'False'
 
-            ReleaseNotes = 'Added HMAC authentication of AES data.'
+            ReleaseNotes = 'Added HMAC authentication of AES data, to prevent tampering.  Note:  Unprotect-Data will not allow you to decrypt data that was protected by an earlier version, due to the missing HMAC.  To add an HMAC to existing ProtectedData objects, you can use the new Add-ProtectedDataHmac command.  This is only necessary for updating existing data; new calls to Protect-Data will automatically produce the HMAC.'
         }
     }
 }
