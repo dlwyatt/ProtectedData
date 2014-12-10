@@ -75,7 +75,7 @@ function Protect-Data
     [CmdletBinding()]
     [OutputType([psobject])]
     param (
-        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true, Position = 0)]
         [ValidateScript({
             if ($script:ValidTypes -notcontains $_.GetType() -and $null -eq ($_ -as [byte[]]))
             {
@@ -244,7 +244,7 @@ function Unprotect-Data
 
     [CmdletBinding(DefaultParameterSetName = 'Certificate')]
     param (
-        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true, Position = 0)]
         [ValidateScript({
             if (-not (Test-IsProtectedData -InputObject $_))
             {
@@ -396,7 +396,7 @@ function Add-ProtectedDataHmac
 
     [CmdletBinding(DefaultParameterSetName = 'Certificate')]
     param (
-        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true, Position = 0)]
         [ValidateScript({
             if (-not (Test-IsProtectedData -InputObject $_))
             {
@@ -561,7 +561,7 @@ function Add-ProtectedDataCredential
 
     [CmdletBinding(DefaultParameterSetName = 'Certificate')]
     param (
-        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true, Position = 0)]
         [ValidateScript({
             if (-not (Test-IsProtectedData -InputObject $_))
             {
@@ -739,7 +739,7 @@ function Remove-ProtectedDataCredential
 
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true, Position = 0)]
         [ValidateScript({
             if (-not (Test-IsProtectedData -InputObject $_))
             {
