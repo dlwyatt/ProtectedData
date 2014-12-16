@@ -152,6 +152,9 @@ $(
 )
 $notBeforeString
 $notAfterString
+
+[EnhancedKeyUsageExtension]
+OID = 1.3.6.1.4.1.311.80.1
 "@
 
     try
