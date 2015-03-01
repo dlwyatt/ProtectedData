@@ -59,7 +59,7 @@ function New-TestCertificate
 
     if ($null -ne $NotAfter)
     {
-        $notAfterString = "NotBefore = ""$($NotAfter.ToString('G'))"""
+        $notAfterString = "NotAfter = ""$($NotAfter.ToString('G'))"""
     }
 
     $requestfile = [System.IO.Path]::GetTempFileName()
@@ -187,21 +187,29 @@ OID = 1.3.6.1.4.1.311.80.1
 
 function Remove-TestCertificate
 {
-    $oldCerts = @(
-        Get-ChildItem Cert:\CurrentUser\My |
-        Where-Object { $_.Subject -eq $testCertificateSubject }
+    $pathsToCheck = @(
+        'Cert:\CurrentUser\My'
+        'Cert:\CurrentUser\CA'
     )
 
-    if ($oldCerts.Count -gt 0)
+    foreach ($path in $pathsToCheck)
     {
-        $store = Get-Item Cert:\CurrentUser\My
-        $store.Open('ReadWrite')
+        $oldCerts = @(
+            Get-ChildItem $path |
+            Where-Object { $_.Subject -eq $testCertificateSubject }
+        )
 
-        foreach ($oldCert in $oldCerts)
+        if ($oldCerts.Count -gt 0)
         {
-            $store.Remove($oldCert)
-        }
+            $store = Get-Item $path
+            $store.Open('ReadWrite')
 
-        $store.Close()
+            foreach ($oldCert in $oldCerts)
+            {
+                $store.Remove($oldCert)
+            }
+
+            $store.Close()
+        }
     }
 }
