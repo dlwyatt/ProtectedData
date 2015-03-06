@@ -1,8 +1,10 @@
 Task default -depends Build,Sign
 
 Properties {
-    $source = $psake.build_script_dir
-    $buildTarget = "$home\Documents\WindowsPowerShell\Modules\ProtectedData"
+    $source               = $psake.build_script_dir
+    $buildTarget          = "$home\Documents\WindowsPowerShell\Modules\ProtectedData"
+    $signerCertThumbprint = 'A2E6B086AC438B5480365B2D5E48BB25F9BE69B3'
+    $signerTimestampUrl   = 'http://timestamp.digicert.com'
 
     $filesToExclude = @(
         'README.md'
@@ -40,13 +42,22 @@ Task Build -depends Test {
 }
 
 Task Sign {
-    $CertThumbprint = 'A2E6B086AC438B5480365B2D5E48BB25F9BE69B3'
-    $TimestampURL   = 'http://timestamp.digicert.com'
+    if (-not $signerCertThumbprint)
+    {
+        throw 'Sign task cannot run without a value in the signerCertThumbprint property.'
+    }
 
-    $cert = $(Get-ChildItem -Path Cert:\CurrentUser\My | Where-Object { $_.Thumbprint -eq $CertThumbprint -and $_.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider] } )
+    $paths = @(
+        'Cert:\CurrentUser\My'
+        'Cert:\LocalMachine\My'
+    )
+
+    $cert = Get-ChildItem -Path $paths |
+            Where-Object { $_.Thumbprint -eq $signerCertThumbprint -and $_.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider] } |
+            Select-Object -First 1
 
     if ($cert -eq $null) {
-        throw 'My code signing certificate was not found!'
+        throw "Code signing certificate with thumbprint '$signerCertThumbprint' was not found, or did not have a usable private key."
     }
 
     $properties = @(
@@ -56,7 +67,15 @@ Task Sign {
         @{ Label = 'TimeStamperCertificate'; Expression = { $_.TimeStamperCertificate.Thumbprint } }
     )
 
+    $splat = @{
+        Certificate  = $cert
+        IncludeChain = 'All'
+        Force        = $true
+    }
+
+    if ($signerTimestampUrl) { $splat['TimestampServer'] = $signerTimestampUrl }
+
     Get-ChildItem -Path $buildTarget\* -Include *.ps1, *.psm1, *.psd1, *.dll |
-    Set-AuthenticodeSignature -Certificate $cert -TimestampServer $TimestampURL -Force -IncludeChain All -ErrorAction Stop |
+    Set-AuthenticodeSignature @splat -ErrorAction Stop |
     Format-Table -Property $properties -AutoSize
 }
