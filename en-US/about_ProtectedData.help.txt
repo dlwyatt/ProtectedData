@@ -19,6 +19,11 @@ SHORT DESCRIPTION
       The ProtectedData module exists to overcome this limitation, while still
       allowing the convenience of not having to worry about managing or protecting
       encryption keys.  It does this, primarily, by leveraging digital certificates.
+
+      Note:  The latest versions of PowerShell have new cmdlets called Protect-CmsMessage
+      and Unprotect-CmsMessage which accomplish a very similar task.  The ProtectedData
+      module is compatible all the way back to PowerShell 2.0, though, and has some
+      features that the CmsMessage cmdlets do not.
     
   How It Works
       When you send a piece of data to the Protect-Data command, it is encrypted
@@ -77,21 +82,15 @@ SHORT DESCRIPTION
   Certificate requirements
       The RSA certificates used with this module must allow Key Encipherment in their
       Key Usage extension.  ECDH certificate must allow the Key Agreement Key Usage
-      extension. All certificates must also be issued by a trusted certificate
-      authority and be currently valid, unless you pass the -SkipCertificateVerification
-      switch parameter when calling the various commands in the module.  This switch
-      allows you to leverage self-signed certificates, etc, if you don't care about
-      validating a trust chain and just want to get at the certificate's key pair.
+      extension.
 
       You can verify which of your certificates are usable for both encryption and
       decryption ahead of time by running the following command:
 
-      Get-KeyEncryptionCertificate -RequirePrivateKey -SkipCertificateVerification
+      Get-KeyEncryptionCertificate -RequirePrivateKey
 
       (With this set of parameters, the command searches the entire Cert: drive, including
-      both CurrentUser and LocalMachine stores, and as mentioned earlier, the 
-      -SkipCertificateVerification switch ignores certificate validity periods, trust
-      chains and revocation status.)
+      both CurrentUser and LocalMachine stores.)
 
 SEE ALSO
     Protect-Data
