@@ -2,7 +2,7 @@ Task default -depends Build,Sign
 
 Properties {
     $source = $psake.build_script_dir
-    $buildTarget = '~\Documents\WindowsPowerShell\Modules\ProtectedData'
+    $buildTarget = "$home\Documents\WindowsPowerShell\Modules\ProtectedData"
 
     $filesToExclude = @(
         'README.md'
