@@ -163,7 +163,7 @@ Describe 'Certificate-based encryption and decryption (By thumbprint)' {
 
     Context 'Finding suitable certificates for encryption and decryption' {
         $certificates = @(
-            Get-KeyEncryptionCertificate @path -SkipCertificateVerification -RequirePrivateKey |
+            Get-KeyEncryptionCertificate @path -RequirePrivateKey |
             Where-Object { ($certThumbprint, $secondCertThumbprint, $wrongCertThumbprint) -contains $_.Thumbprint }
         )
 
@@ -173,10 +173,10 @@ Describe 'Certificate-based encryption and decryption (By thumbprint)' {
     }
 
     Context 'General Usage' {
-        $protected = Protect-Data -InputObject $stringToEncrypt -Certificate $certThumbprint -SkipCertificateVerification
+        $protected = Protect-Data -InputObject $stringToEncrypt -Certificate $certThumbprint
 
         It 'Decrypts data successfully' {
-            Unprotect-Data -InputObject $protected -Certificate $certThumbprint -SkipCertificateVerification -ErrorAction Stop | Should Be $stringToEncrypt
+            Unprotect-Data -InputObject $protected -Certificate $certThumbprint -ErrorAction Stop | Should Be $stringToEncrypt
         }
     }
 
@@ -189,38 +189,34 @@ Describe 'Certificate-Based encryption and decryption (By certificate object)' {
     $WrongCertFromFile = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$scriptRoot\TestCertificateFile3.pfx", 'password')
 
     Context 'General Usage' {
-        It 'Produces an error if a self-signed certificate is used, without the -SkipCertificateVerification switch' {
-            { $null = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile -ErrorAction Stop } | Should Throw
+        It 'Does not produce an error when a self-signed or otherwise invalid certificate is used.' {
+            { $null = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile -ErrorAction Stop } | Should Not Throw
         }
 
-        It 'Does not produce an error when a self-signed certificate is used, if the -SkipCertificateVerification switch is also used.' {
-            { $null = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
-        }
-
-        $protected = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile, $secondCertFromFile -SkipCertificateVerification
+        $protected = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile, $secondCertFromFile
 
         It 'Produces an error if a decryption attempt with the wrong certificate is made.' {
-            { $null = Unprotect-Data -InputObject $protected -Certificate $wrongCertFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Throw
+            { $null = Unprotect-Data -InputObject $protected -Certificate $wrongCertFromFile -ErrorAction Stop } | Should Throw
         }
 
         It 'Allows any of the specified certificates to be used during decryption (First certificate test)' {
-            { $null = Unprotect-Data -InputObject $protected -Certificate $certFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
+            { $null = Unprotect-Data -InputObject $protected -Certificate $certFromFile -ErrorAction Stop } | Should Not Throw
         }
 
         It 'Allows any of the specified certificates to be used during decryption (Second certificate test)' {
-            { $null = Unprotect-Data -InputObject $protected -Certificate $secondCertFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
+            { $null = Unprotect-Data -InputObject $protected -Certificate $secondCertFromFile -ErrorAction Stop } | Should Not Throw
         }
 
         It 'Adds a new certificate to an existing object' {
             $scriptBlock = {
-                Add-ProtectedDataCredential -InputObject $protected -Certificate $secondCertFromFile -NewCertificate $wrongCertFromFile -SkipCertificateVerification -ErrorAction Stop
+                Add-ProtectedDataCredential -InputObject $protected -Certificate $secondCertFromFile -NewCertificate $wrongCertFromFile -ErrorAction Stop
             }
 
             $scriptBlock | Should Not Throw
         }
 
         It 'Allows the object to be decrypted with the new certificate' {
-            { $null = Unprotect-Data -InputObject $protected -Certificate $wrongCertFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
+            { $null = Unprotect-Data -InputObject $protected -Certificate $wrongCertFromFile -ErrorAction Stop } | Should Not Throw
         }
 
         It 'Removes a certificate from the object' {
@@ -228,13 +224,13 @@ Describe 'Certificate-Based encryption and decryption (By certificate object)' {
         }
 
         It 'No longer allows the data to be decrypted with the removed certificate' {
-            { $null = Unprotect-Data -InputObject $protected -Certificate $secondCertFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Throw
+            { $null = Unprotect-Data -InputObject $protected -Certificate $secondCertFromFile -ErrorAction Stop } | Should Throw
         }
     }
 
     Context 'Protecting strings' {
-        $protectedData = $stringToEncrypt | Protect-Data -Certificate $certFromFile -SkipCertificateVerification
-        $decrypted = $protectedData | Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification
+        $protectedData = $stringToEncrypt | Protect-Data -Certificate $certFromFile
+        $decrypted = $protectedData | Unprotect-Data -Certificate $certFromFile
 
         It 'Does not return null' {
             $decrypted | Should Not Be $null
@@ -250,8 +246,8 @@ Describe 'Certificate-Based encryption and decryption (By certificate object)' {
     }
 
     Context 'Protecting SecureStrings' {
-        $protectedData = $secureStringToEncrypt | Protect-Data -Certificate $certFromFile -SkipCertificateVerification
-        $decrypted = $protectedData | Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification
+        $protectedData = $secureStringToEncrypt | Protect-Data -Certificate $certFromFile
+        $decrypted = $protectedData | Unprotect-Data -Certificate $certFromFile
 
         It 'Does not return null' {
             $decrypted | Should Not Be $null
@@ -267,8 +263,8 @@ Describe 'Certificate-Based encryption and decryption (By certificate object)' {
     }
 
     Context 'Protecting PSCredentials' {
-        $protectedData = $credentialToEncrypt | Protect-Data -Certificate $certFromFile -SkipCertificateVerification
-        $decrypted = $protectedData | Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification
+        $protectedData = $credentialToEncrypt | Protect-Data -Certificate $certFromFile
+        $decrypted = $protectedData | Unprotect-Data -Certificate $certFromFile
 
         It 'Does not return null' {
             $decrypted | Should Not Be $null
@@ -288,8 +284,8 @@ Describe 'Certificate-Based encryption and decryption (By certificate object)' {
     }
 
     Context 'Protecting Byte Arrays' {
-        $protectedData = Protect-Data -InputObject $byteArrayToEncrypt -Certificate $certFromFile -SkipCertificateVerification
-        $decrypted = Unprotect-Data -InputObject $protectedData -Certificate $certFromFile -SkipCertificateVerification
+        $protectedData = Protect-Data -InputObject $byteArrayToEncrypt -Certificate $certFromFile
+        $decrypted = Unprotect-Data -InputObject $protectedData -Certificate $certFromFile
 
         It 'Does not return null' {
             ,$decrypted | Should Not Be $null
@@ -316,7 +312,7 @@ Describe 'Certificate-based encryption / decryption (by file system path)' {
 
         try
         {
-            { $hash.ProtectedData = Protect-Data $stringToEncrypt -Certificate '.\TestCertificateFile.cer' -SkipCertificateVerification -ErrorAction Stop } |
+            { $hash.ProtectedData = Protect-Data $stringToEncrypt -Certificate '.\TestCertificateFile.cer' -ErrorAction Stop } |
             Should Not Throw
         }
         finally
@@ -326,7 +322,7 @@ Describe 'Certificate-based encryption / decryption (by file system path)' {
     }
 
     It 'Decrypts the data successfully' {
-        Unprotect-Data -InputObject $hash.ProtectedData -Certificate $certFromFile -SkipCertificateVerification |
+        Unprotect-Data -InputObject $hash.ProtectedData -Certificate $certFromFile |
         Should Be $stringToEncrypt
     }
 }
@@ -341,7 +337,7 @@ Describe 'Certificate-based encryption / decryption (by certificate path)' {
 
         try
         {
-            { $hash.ProtectedData = Protect-Data $stringToEncrypt -Certificate ".\$testThumbprint" -SkipCertificateVerification -ErrorAction Stop } |
+            { $hash.ProtectedData = Protect-Data $stringToEncrypt -Certificate ".\$testThumbprint" -ErrorAction Stop } |
             Should Not Throw
         }
         finally
@@ -355,7 +351,7 @@ Describe 'Certificate-based encryption / decryption (by certificate path)' {
 
         try
         {
-            Unprotect-Data -InputObject $hash.ProtectedData -Certificate ".\$testThumbprint" -SkipCertificateVerification |
+            Unprotect-Data -InputObject $hash.ProtectedData -Certificate ".\$testThumbprint" |
             Should Be $stringToEncrypt
         }
         finally
@@ -392,23 +388,23 @@ Describe 'Legacy Padding Support' {
         Set-StrictMode -Version Latest
 
         It 'Throws an error if the HMAC code is missing' {
-            $scriptBlock = { $protectedData | Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification -ErrorAction Stop }
+            $scriptBlock = { $protectedData | Unprotect-Data -Certificate $certFromFile -ErrorAction Stop }
             $scriptBlock | Should Throw 'Input Object contained no HMAC code'
         }
 
         It 'Adds an HMAC to the legacy object' {
-            $protectedData | Add-ProtectedDataHmac -Certificate $certFromFile -SkipCertificateVerification
+            $protectedData | Add-ProtectedDataHmac -Certificate $certFromFile
             ,$protectedData.HMAC | Should Not BeNullOrEmpty
         }
 
         It 'Unprotects the data properly even with strict mode enabled' {
-            { $protectedData | Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification -ErrorAction Stop } | Should Not Throw
-            $protectedData | Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification | Should Be $stringToEncrypt
+            { $protectedData | Unprotect-Data -Certificate $certFromFile -ErrorAction Stop } | Should Not Throw
+            $protectedData | Unprotect-Data -Certificate $certFromFile | Should Be $stringToEncrypt
         }
     }
 
     Context 'Using legacy padding' {
-        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile -SkipCertificateVerification -UseLegacyPadding
+        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile -UseLegacyPadding
 
         It 'Assigns the use legacy padding property' {
             $protectedData.KeyData[0].LegacyPadding | Should Be $true
@@ -416,13 +412,13 @@ Describe 'Legacy Padding Support' {
 
         It 'Decrypts data properly' {
             $protectedData |
-            Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification |
+            Unprotect-Data -Certificate $certFromFile |
             Should Be $stringToEncrypt
         }
     }
 
     Context 'Using OAEP padding' {
-        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile -SkipCertificateVerification
+        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile
 
         It 'Does not assign the use legacy padding property' {
             $protectedData.KeyData[0].LegacyPadding | Should Be $false
@@ -430,7 +426,7 @@ Describe 'Legacy Padding Support' {
 
         It 'Decrypts data properly' {
             $protectedData |
-            Unprotect-Data -Certificate $certFromFile -SkipCertificateVerification |
+            Unprotect-Data -Certificate $certFromFile |
             Should Be $stringToEncrypt
         }
     }
@@ -441,17 +437,17 @@ Describe 'RSA Certificates (CNG Key Storage Provider)' {
         $thumbprint = New-TestCertificate -Subject $testCertificateSubject -CertificateType RsaCng
         $testCert = Get-Item Cert:\CurrentUser\My\$thumbprint
 
-        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification
+        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert
 
         It 'Decrypts data successfully using an RSA cert using a CNG KSP' {
-            Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification |
+            Unprotect-Data -InputObject $protectedData -Certificate $testCert |
             Should Be $stringToEncrypt
         }
 
-        $protectedWithLegacyPadding = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification -UseLegacyPadding
+        $protectedWithLegacyPadding = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -UseLegacyPadding
 
         It 'Decrypts data successfully with legacy padding' {
-            Unprotect-Data -InputObject $protectedWithLegacyPadding -Certificate $testCert -SkipCertificateVerification |
+            Unprotect-Data -InputObject $protectedWithLegacyPadding -Certificate $testCert |
             Should Be $stringToEncrypt
         }
     }
@@ -464,10 +460,10 @@ Describe 'ECDH Certificates' {
         $thumbprint = New-TestCertificate -Subject $testCertificateSubject -CertificateType Ecdh_P256
         $testCert = Get-Item Cert:\CurrentUser\My\$thumbprint
 
-        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification
+        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert
 
         It 'Decrypts data successfully using an ECDH_P256 certificate' {
-            Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification |
+            Unprotect-Data -InputObject $protectedData -Certificate $testCert |
             Should Be $stringToEncrypt
         }
     }
@@ -476,10 +472,10 @@ Describe 'ECDH Certificates' {
         $thumbprint = New-TestCertificate -Subject $testCertificateSubject -CertificateType Ecdh_P384
         $testCert = Get-Item Cert:\CurrentUser\My\$thumbprint
 
-        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification
+        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert
 
         It 'Decrypts data successfully using an ECDH_P384 certificate' {
-            Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification |
+            Unprotect-Data -InputObject $protectedData -Certificate $testCert |
             Should Be $stringToEncrypt
         }
     }
@@ -488,10 +484,10 @@ Describe 'ECDH Certificates' {
         $thumbprint = New-TestCertificate -Subject $testCertificateSubject -CertificateType Ecdh_P521
         $testCert = Get-Item Cert:\CurrentUser\My\$thumbprint
 
-        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -SkipCertificateVerification
+        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert
 
         It 'Decrypts data successfully using an ECDH_P521 certificate' {
-            Unprotect-Data -InputObject $protectedData -Certificate $testCert -SkipCertificateVerification |
+            Unprotect-Data -InputObject $protectedData -Certificate $testCert |
             Should Be $stringToEncrypt
         }
     }

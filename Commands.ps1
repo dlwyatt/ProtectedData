@@ -36,9 +36,8 @@ function Protect-Data
        Optional switch specifying that when performing certificate-based encryption, PKCS#1 v1.5 padding should be used instead of the newer, more secure OAEP padding scheme.  Some certificates may not work properly with OAEP padding
     .PARAMETER Password
        Zero or more SecureString objects containing password that will be used to derive encryption keys. The data can later be decrypted by passing in a SecureString with the same value.
-    .PARAMETER SkipCertificateValidation
-       If specified, the command does not attempt to validate that the specified certificate(s) came from trusted publishers and have not been revoked or expired.
-       This is primarily intended to allow the use of self-signed certificates.
+    .PARAMETER SkipCertificateVerification
+       Deprecated parameter, which will be removed in a future release.  Specifying this switch will generate a warning.
     .PARAMETER PasswordIterationCount
        Optional positive integer value specifying the number of iteration that should be used when deriving encryption keys from the specified password(s). Defaults to 1000.
        Higher values make it more costly to crack the passwords by brute force.
@@ -122,6 +121,11 @@ function Protect-Data
 
     begin
     {
+        if ($PSBoundParameters.ContainsKey('SkipCertificateVerification'))
+        {
+            Write-Warning 'The -SkipCertificateVerification switch has been deprecated, and the module now treats that as its default behavior.  This switch will be removed in a future release.'
+        }
+
         $certs = @(
             foreach ($cert in $Certificate)
             {
@@ -129,13 +133,7 @@ function Protect-Data
                 {
 
                     $x509Cert = ConvertTo-X509Certificate2 -InputObject $cert -ErrorAction Stop
-
-                    $params = @{
-                        CertificateGroup = $x509Cert
-                        SkipCertificateVerification = $SkipCertificateVerification
-                    }
-
-                    ValidateKeyEncryptionCertificate @params -ErrorAction Stop
+                    ValidateKeyEncryptionCertificate -CertificateGroup $x509Cert -ErrorAction Stop
                 }
                 catch
                 {
@@ -218,8 +216,7 @@ function Unprotect-Data
     .PARAMETER Password
        A SecureString containing a password that will be used to derive an encryption key. One of the InputObject's KeyData objects must be protected with this password.
     .PARAMETER SkipCertificateValidation
-       If specified, the command does not attempt to validate that the specified certificate(s) came from trusted publishers and have not been revoked or expired.
-       This is primarily intended to allow the use of self-signed certificates.
+       Deprecated parameter, which will be removed in a future release.  Specifying this switch will generate a warning.
     .EXAMPLE
        $decryptedObject = $encryptedObject | Unprotect-Data -Password (Read-Host -AsSecureString -Prompt 'Enter password to decrypt the data')
 
@@ -282,6 +279,11 @@ function Unprotect-Data
 
     begin
     {
+        if ($PSBoundParameters.ContainsKey('SkipCertificateVerification'))
+        {
+            Write-Warning 'The -SkipCertificateVerification switch has been deprecated, and the module now treats that as its default behavior.  This switch will be removed in a future release.'
+        }
+
         $cert = $null
 
         if ($Certificate)
@@ -293,7 +295,6 @@ function Unprotect-Data
                 $params = @{
                     CertificateGroup = $cert
                     RequirePrivateKey = $true
-                    SkipCertificateVerification = $SkipCertificateVerification
                 }
 
                 $cert = ValidateKeyEncryptionCertificate @params -ErrorAction Stop
@@ -367,9 +368,8 @@ function Add-ProtectedDataHmac
        An RSA or ECDH certificate that will be used to decrypt the data.  You must have the certificate's private key, and it must be one of the certificates that was used to encrypt the data.  You can pass an X509Certificate2 object to this parameter, or you can pass in a string which contains either a path to a certificate file on the file system, a path to the certificate in the Certificate provider, or a certificate thumbprint (in which case the certificate provider will be searched to find the certificate.)
     .PARAMETER Password
        A SecureString containing a password that will be used to derive an encryption key. One of the InputObject's KeyData objects must be protected with this password.
-    .PARAMETER SkipCertificateValidation
-       If specified, the command does not attempt to validate that the specified certificate(s) came from trusted publishers and have not been revoked or expired.
-       This is primarily intended to allow the use of self-signed certificates.
+    .PARAMETER SkipCertificateVerification
+       Deprecated parameter, which will be removed in a future release.  Specifying this switch will generate a warning.
     .PARAMETER PassThru
        If specified, the command outputs the ProtectedData object after adding the HMAC.
     .EXAMPLE
@@ -437,6 +437,11 @@ function Add-ProtectedDataHmac
 
     begin
     {
+        if ($PSBoundParameters.ContainsKey('SkipCertificateVerification'))
+        {
+            Write-Warning 'The -SkipCertificateVerification switch has been deprecated, and the module now treats that as its default behavior.  This switch will be removed in a future release.'
+        }
+
         $cert = $null
 
         if ($Certificate)
@@ -448,7 +453,6 @@ function Add-ProtectedDataHmac
                 $params = @{
                     CertificateGroup = $cert
                     RequirePrivateKey = $true
-                    SkipCertificateVerification = $SkipCertificateVerification
                 }
 
                 $cert = ValidateKeyEncryptionCertificate @params -ErrorAction Stop
@@ -530,9 +534,8 @@ function Add-ProtectedDataCredential
        Optional switch specifying that when performing certificate-based encryption, PKCS#1 v1.5 padding should be used instead of the newer, more secure OAEP padding scheme.  Some certificates may not work properly with OAEP padding
     .PARAMETER NewPassword
        Zero or more SecureString objects containing password that will be used to derive encryption keys. The data can later be decrypted by passing in a SecureString with the same value.
-    .PARAMETER SkipCertificateValidation
-       If specified, the command does not attempt to validate that the specified certificate(s) came from trusted publishers and have not been revoked or expired.
-       This is primarily intended to allow the use of self-signed certificates.
+    .PARAMETER SkipCertificateVerification
+       Deprecated parameter, which will be removed in a future release.  Specifying this switch will generate a warning.
     .PARAMETER PasswordIterationCount
        Optional positive integer value specifying the number of iteration that should be used when deriving encryption keys from the specified password(s). Defaults to 1000.
        Higher values make it more costly to crack the passwords by brute force.
@@ -610,6 +613,11 @@ function Add-ProtectedDataCredential
 
     begin
     {
+        if ($PSBoundParameters.ContainsKey('SkipCertificateVerification'))
+        {
+            Write-Warning 'The -SkipCertificateVerification switch has been deprecated, and the module now treats that as its default behavior.  This switch will be removed in a future release.'
+        }
+
         $decryptionCert = $null
 
         if ($PSCmdlet.ParameterSetName -eq 'Certificate')
@@ -620,7 +628,6 @@ function Add-ProtectedDataCredential
 
                 $params = @{
                     CertificateGroup = $decryptionCert
-                    SkipCertificateVerification = $SkipCertificateVerification
                     RequirePrivateKey = $true
                 }
 
@@ -638,13 +645,7 @@ function Add-ProtectedDataCredential
                 try
                 {
                     $x509Cert = ConvertTo-X509Certificate2 -InputObject $cert -ErrorAction Stop
-
-                    $params = @{
-                        CertificateGroup = $x509Cert
-                        SkipCertificateVerification = $SkipCertificateVerification
-                    }
-
-                    ValidateKeyEncryptionCertificate @params -ErrorAction Stop
+                    ValidateKeyEncryptionCertificate -CertificateGroup $x509Cert -ErrorAction Stop
                 }
                 catch
                 {
@@ -856,17 +857,17 @@ function Get-KeyEncryptionCertificate
     .PARAMETER CertificateThumbprint
        Thumbprints which should be included in the search. Wildcards are allowed. Defaults to '*'.
     .PARAMETER SkipCertificateVerification
-       If this switch is used, the command will include certificates which are not yet valid, expired, revoked, or issued by an untrusted authority. This can be useful if you wish to use a self-signed certificate for encryption.
+       Deprecated parameter, which will be removed in a future release.  Specifying this switch will generate a warning.
     .PARAMETER RequirePrivateKey
        If this switch is used, the command will only output certificates which have a usable private key on this computer.
     .EXAMPLE
-       Get-KeyEncryptionCertificate -Path Cert:\CurrentUser -RequirePrivateKey -SkipCertificateVerification
+       Get-KeyEncryptionCertificate -Path Cert:\CurrentUser -RequirePrivateKey
 
-       Searches for certificates which support key encipherment (RSA) or key agreement (ECDH) and have a private key installed. All matching certificates are returned, and they do not need to be verified for trust, revocation or validity period.
+       Searches for certificates which support key encipherment (RSA) or key agreement (ECDH) and have a private key installed. All matching certificates are returned.
     .EXAMPLE
        Get-KeyEncryptionCertificate -Path Cert:\CurrentUser\TrustedPeople
 
-       Searches the current user's Trusted People store for certificates that can be used with Protect-Data. Certificates must be current, issued by a trusted authority, and not revoked, but they do not need to have a private key available to the current user.
+       Searches the current user's Trusted People store for certificates that can be used with Protect-Data. Certificates do not need to have a private key available to the current user.
     .INPUTS
        None.
     .OUTPUTS
@@ -898,6 +899,11 @@ function Get-KeyEncryptionCertificate
         $RequirePrivateKey
     )
 
+    if ($PSBoundParameters.ContainsKey('SkipCertificateVerification'))
+    {
+        Write-Warning 'The -SkipCertificateVerification switch has been deprecated, and the module now treats that as its default behavior.  This switch will be removed in a future release.'
+    }
+
     # Suppress error output if we're doing a wildcard search (unless user specifically asks for it via -ErrorAction)
     # This is a little ugly, may rework this later now that I've made Get-KeyEncryptionCertificate public. Originally
     # it was only used to search for a single thumbprint, and threw errors back to the caller if no suitable cert could
@@ -918,14 +924,9 @@ function Get-KeyEncryptionCertificate
         throw "Certificate '$CertificateThumbprint' was not found."
     }
 
-    $params = @{
-        SkipCertificateVerification = $SkipCertificateVerification
-        RequirePrivateKey = $RequirePrivateKey
-    }
-
     foreach ($group in $certGroups)
     {
-        ValidateKeyEncryptionCertificate -CertificateGroup $group.Group @params
+        ValidateKeyEncryptionCertificate -CertificateGroup $group.Group -RequirePrivateKey:$RequirePrivateKey
     }
 
 } # function Get-KeyEncryptionCertificate
@@ -1364,9 +1365,6 @@ function ValidateKeyEncryptionCertificate
         $CertificateGroup,
 
         [switch]
-        $SkipCertificateVerification,
-
-        [switch]
         $RequirePrivateKey
     )
 
@@ -1381,21 +1379,6 @@ function ValidateKeyEncryptionCertificate
         {
             Write-Error "Certficiate '$($Certificate.Thumbprint)' is not an RSA or ECDH certificate."
             return
-        }
-
-        if (-not $SkipCertificateVerification)
-        {
-            if ($Certificate.NotBefore -gt (Get-Date))
-            {
-                Write-Error "Certificate '$($Certificate.Thumbprint)' is not yet valid."
-                return
-            }
-
-            if ($Certificate.NotAfter -lt (Get-Date))
-            {
-                Write-Error "Certificate '$($Certificate.Thumbprint)' has expired."
-                return
-            }
         }
 
         if ($isEccCertificate)
@@ -1420,12 +1403,6 @@ function ValidateKeyEncryptionCertificate
         if (($keyUsageFlags -band $neededKeyUsage) -ne $neededKeyUsage)
         {
             Write-Error "Certificate '$($Certificate.Thumbprint)' does not have the required $($neededKeyUsage.ToString()) Key Usage flag."
-            return
-        }
-
-        if (-not $SkipCertificateVerification -and -not $Certificate.Verify())
-        {
-            Write-Error "Verification of certificate '$($Certificate.Thumbprint)' failed."
             return
         }
 
