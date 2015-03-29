@@ -182,34 +182,44 @@ OID = 1.3.6.1.4.1.311.80.1
     {
         Remove-Item -Path $requestfile -Force -ErrorAction SilentlyContinue
         Remove-Item -Path $certFile -Force -ErrorAction SilentlyContinue
+
+        if (Test-Path Cert:\CurrentUser\CA\$newCert)
+        {
+            try
+            {
+                $store = Get-Item Cert:\CurrentUser\CA
+                $store.Open('ReadWrite')
+
+                $cert = Get-Item Cert:\CurrentUser\CA\$newCert
+
+                $store.Remove($cert)
+
+                $store.Close()
+            }
+            catch { }
+        }
     }
 }
 
 function Remove-TestCertificate
 {
-    $pathsToCheck = @(
-        'Cert:\CurrentUser\My'
-        'Cert:\CurrentUser\CA'
+    $path = 'Cert:\CurrentUser\My'
+
+    $oldCerts = @(
+        Get-ChildItem $path |
+        Where-Object { $_.Subject -eq $testCertificateSubject }
     )
 
-    foreach ($path in $pathsToCheck)
+    if ($oldCerts.Count -gt 0)
     {
-        $oldCerts = @(
-            Get-ChildItem $path |
-            Where-Object { $_.Subject -eq $testCertificateSubject }
-        )
+        $store = Get-Item $path
+        $store.Open('ReadWrite')
 
-        if ($oldCerts.Count -gt 0)
+        foreach ($oldCert in $oldCerts)
         {
-            $store = Get-Item $path
-            $store.Open('ReadWrite')
-
-            foreach ($oldCert in $oldCerts)
-            {
-                $store.Remove($oldCert)
-            }
-
-            $store.Close()
+            $store.Remove($oldCert)
         }
+
+        $store.Close()
     }
 }
