@@ -361,6 +361,29 @@ Describe 'Certificate-based encryption / decryption (by certificate path)' {
     }
 }
 
+Describe 'Certificate-based decryption (automatic detection of cert)' {
+    Remove-TestCertificate
+
+    $certThumbprint = New-TestCertificate -Subject $testCertificateSubject
+
+    $protectedData = $stringToEncrypt | Protect-Data -Certificate Cert:\CurrentUser\My\$certThumbprint
+
+    It 'Successfully finds the matching certificate and decrypts the data' {
+        $hash = @{}
+        $scriptBlock = { $hash.Decrypted = Unprotect-Data $protectedData -ErrorAction Stop }
+
+        $scriptBlock | Should Not Throw
+        $hash.Decrypted | Should Be $stringToEncrypt
+    }
+
+    Remove-TestCertificate
+
+    It 'Gives a useful error message when no matching certificate is found' {
+        $scriptBlock = { $null = Unprotect-Data $protectedData -ErrorAction Stop }
+        $scriptBlock | Should Throw 'No decryption certificate for the specified InputObject was found'
+    }
+}
+
 Describe 'HMAC authentication of AES data' {
     $protectedData = $stringToEncrypt | Protect-Data -Password $passwordForEncryption
 

@@ -265,7 +265,7 @@ function Unprotect-Data
         })]
         $InputObject,
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
+        [Parameter(ParameterSetName = 'Certificate')]
         [object]
         $Certificate,
 
@@ -313,13 +313,47 @@ function Unprotect-Data
         $key = $null
         $iv = $null
 
-        if ($null -ne $cert)
+        if ($null -ne $Password)
         {
-            $params = @{ Certificate = $cert }
+            $params = @{ Password = $Password }
         }
         else
         {
-            $params = @{ Password = $Password }
+            if ($null -eq $cert)
+            {
+                $paths = 'Cert:\CurrentUser\My', 'Cert:\LocalMachine\My'
+
+                $cert = :outer foreach ($path in $paths)
+                {
+                    foreach ($keyData in $InputObject.KeyData)
+                    {
+                        if ($keyData.Thumbprint)
+                        {
+                            $certObject = $null
+                            try
+                            {
+                                $certObject = Get-KeyEncryptionCertificate -Path $path -CertificateThumbprint $keyData.Thumbprint -RequirePrivateKey -ErrorAction $IgnoreError
+                            } catch { }
+
+                            if ($null -ne $certObject)
+                            {
+                                $certObject
+                                break outer
+                            }
+                        }
+                    }
+                }
+            }
+
+            if ($null -eq $cert)
+            {
+                Write-Error -Message 'No decryption certificate for the specified InputObject was found.' -TargetObject $InputObject
+                return
+            }
+
+            $params = @{
+                Certificate = $cert
+            }
         }
 
         try
@@ -1655,7 +1689,7 @@ function Protect-KeyDataWithEcdhCertificate
         $encryptedKey = Protect-DataWithAes -PlainText $Key -Key $derivedKey -IV $ecdhIv -NoHMAC
         $encryptedIv  = Protect-DataWithAes -PlainText $IV -Key $derivedKey -IV $ecdhIv -NoHMAC
 
-        New-Object psobject @{
+        New-Object psobject -Property @{
             Key = $encryptedKey.CipherText
             IV = $encryptedIv.CipherText
             EcdhPublicKey = $ecdh.PublicKey.ToByteArray()
