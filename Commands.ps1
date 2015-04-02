@@ -39,7 +39,7 @@ function Protect-Data
     .PARAMETER SkipCertificateVerification
        Deprecated parameter, which will be removed in a future release.  Specifying this switch will generate a warning.
     .PARAMETER PasswordIterationCount
-       Optional positive integer value specifying the number of iteration that should be used when deriving encryption keys from the specified password(s). Defaults to 1000.
+       Optional positive integer value specifying the number of iteration that should be used when deriving encryption keys from the specified password(s). Defaults to 50000.
        Higher values make it more costly to crack the passwords by brute force.
     .EXAMPLE
        $encryptedObject = Protect-Data -InputObject $myString -CertificateThumbprint CB04E7C885BEAE441B39BC843C85855D97785D25 -Password (Read-Host -AsSecureString -Prompt 'Enter password to encrypt')
@@ -113,7 +113,7 @@ function Protect-Data
 
         [ValidateRange(1,2147483647)]
         [int]
-        $PasswordIterationCount = 1000,
+        $PasswordIterationCount = 50000,
 
         [switch]
         $SkipCertificateVerification
@@ -571,7 +571,7 @@ function Add-ProtectedDataCredential
     .PARAMETER SkipCertificateVerification
        Deprecated parameter, which will be removed in a future release.  Specifying this switch will generate a warning.
     .PARAMETER PasswordIterationCount
-       Optional positive integer value specifying the number of iteration that should be used when deriving encryption keys from the specified password(s). Defaults to 1000.
+       Optional positive integer value specifying the number of iteration that should be used when deriving encryption keys from the specified password(s). Defaults to 50000.
        Higher values make it more costly to crack the passwords by brute force.
     .PARAMETER Passthru
        If this switch is used, the ProtectedData object is output to the pipeline after it is modified.
@@ -636,7 +636,7 @@ function Add-ProtectedDataCredential
 
         [ValidateRange(1,2147483647)]
         [int]
-        $PasswordIterationCount = 1000,
+        $PasswordIterationCount = 50000,
 
         [switch]
         $SkipCertificateVerification,
@@ -716,7 +716,7 @@ function Add-ProtectedDataCredential
             $key = $result.Key
             $iv = $result.IV
 
-            Add-KeyData -InputObject $InputObject -Key $key -IV $iv -Certificate $certs -Password $NewPassword -UseLegacyPadding:$UseLegacyPadding
+            Add-KeyData -InputObject $InputObject -Key $key -IV $iv -Certificate $certs -Password $NewPassword -PasswordIterationCount $PasswordIterationCount -UseLegacyPadding:$UseLegacyPadding
         }
         catch
         {
@@ -1287,7 +1287,7 @@ function Add-KeyData
 
         [ValidateRange(1,2147483647)]
         [int]
-        $PasswordIterationCount = 1000
+        $PasswordIterationCount = 50000
     )
 
     if ($certs.Count -eq 0 -and $Password.Count -eq 0)
@@ -1500,7 +1500,7 @@ function Get-KeyGenerator
 
         [ValidateRange(1,2147483647)]
         [int]
-        $IterationCount = 1000
+        $IterationCount = 50000
     )
 
     $byteArray = $null
@@ -1542,7 +1542,7 @@ function Get-PasswordHash
 
         [ValidateRange(1, 2147483647)]
         [int]
-        $IterationCount = 1000
+        $IterationCount = 50000
     )
 
     $keyGen = $null
@@ -1965,7 +1965,7 @@ function Protect-KeyDataWithPassword
 
         [ValidateRange(1,2147483647)]
         [int]
-        $IterationCount = 1000
+        $IterationCount = 50000
     )
 
     $keyGen = $null

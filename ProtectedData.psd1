@@ -8,7 +8,7 @@
 
 @{
     ModuleToProcess        = 'ProtectedData.psm1'
-    ModuleVersion          = '4.1.1'
+    ModuleVersion          = '4.1.2'
     GUID                   = 'fc6a2f6a-563d-422a-85b5-9638e45a370e'
     Author                 = 'Dave Wyatt'
     CompanyName            = 'Home'
@@ -32,12 +32,12 @@
             ProjectUri = 'https://github.com/dlwyatt/ProtectedData'
 
             # The web address of this module's license. Points to a page that's embeddable and linkable.
-            LicenseUri = 'http://www.gnu.org/licenses/gpl-2.0.html'
+            LicenseUri = 'https://www.apache.org/licenses/LICENSE-2.0.html'
 
             # Indicates this is a pre-release/testing version of the module.
             IsPrerelease = 'False'
 
-            ReleaseNotes = 'Added code to automatically detect an available decryption certificate.'
+            ReleaseNotes = 'Default password iteration count increased to 50000.  Fixed bug in Add-ProtectedDataCredential where user-specified -PasswordIterationCount was ignored.'
         }
     }
 }

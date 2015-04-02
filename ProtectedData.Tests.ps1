@@ -25,6 +25,8 @@ $wrongPassword = 'wr0ngp@ssw0rd' | ConvertTo-SecureString -AsPlainText -Force
 $testCertificateSubject = 'CN=ProtectedData Test Certificate, OU=Unit Tests, O=ProtectedData, L=Somewhere, S=Ontario, C=CA'
 
 Describe 'Password-based encryption and decryption' {
+    $iterationCount = 20
+
     Context 'General Usage' {
         $blankSecureString = New-Object System.Security.SecureString
         $blankSecureString.MakeReadOnly()
@@ -32,14 +34,14 @@ Describe 'Password-based encryption and decryption' {
         $secondPassword = 'Some other password' | ConvertTo-SecureString -AsPlainText -Force
 
         It 'Produces an error if a blank password is used' {
-            { $null = Protect-Data -InputObject $stringToEncrypt -Password $blankSecureString -ErrorAction Stop } | Should Throw
+            { $null = Protect-Data -InputObject $stringToEncrypt -Password $blankSecureString -ErrorAction Stop -PasswordIterationCount $iterationCount } | Should Throw
         }
 
         It 'Does not produce an error when a non-blank password is used' {
-            { $null = Protect-Data -InputObject $stringToEncrypt -Password $passwordForEncryption -ErrorAction Stop } | Should Not Throw
+            { $null = Protect-Data -InputObject $stringToEncrypt -Password $passwordForEncryption -ErrorAction Stop -PasswordIterationCount $iterationCount } | Should Not Throw
         }
 
-        $protected = Protect-Data -InputObject $stringToEncrypt -Password $passwordForEncryption, $secondPassword
+        $protected = Protect-Data -InputObject $stringToEncrypt -Password $passwordForEncryption, $secondPassword -PasswordIterationCount $iterationCount
 
         It 'Produces an error if a decryption attempt with the wrong password is made.' {
             { $null = Unprotect-Data -InputObject $protected -Password $wrongPassword -ErrorAction Stop } | Should Throw
@@ -54,8 +56,13 @@ Describe 'Password-based encryption and decryption' {
         }
 
         It 'Adds a new password to an existing object' {
-            { Add-ProtectedDataCredential -InputObject $protected -Password $passwordForEncryption -NewPassword $wrongPassword -ErrorAction Stop } |
+            { Add-ProtectedDataCredential -InputObject $protected -Password $passwordForEncryption -NewPassword $wrongPassword -ErrorAction Stop -PasswordIterationCount $iterationCount } |
             Should Not Throw
+        }
+
+        It 'Uses the proper iteration count when Add-ProtectedDataCredential was called' {
+            $wrong = $protected.KeyData | Where-Object { $null -ne $_.PSObject.Properties['IterationCount'] -and $_.IterationCount -ne $iterationCount }
+            $wrong | Should Be $null
         }
 
         It 'Allows the object to be decrypted with the new password' {
@@ -72,7 +79,7 @@ Describe 'Password-based encryption and decryption' {
     }
 
     Context 'Protecting strings' {
-        $protectedData = $stringToEncrypt | Protect-Data -Password $passwordForEncryption
+        $protectedData = $stringToEncrypt | Protect-Data -Password $passwordForEncryption -PasswordIterationCount $iterationCount
         $decrypted = $protectedData | Unprotect-Data -Password $passwordForEncryption
 
         It 'Does not return null' {
@@ -89,7 +96,7 @@ Describe 'Password-based encryption and decryption' {
     }
 
     Context 'Protecting SecureStrings' {
-        $protectedData = $secureStringToEncrypt | Protect-Data -Password $passwordForEncryption
+        $protectedData = $secureStringToEncrypt | Protect-Data -Password $passwordForEncryption -PasswordIterationCount $iterationCount
         $decrypted = $protectedData | Unprotect-Data -Password $passwordForEncryption
 
         It 'Does not return null' {
@@ -106,7 +113,7 @@ Describe 'Password-based encryption and decryption' {
     }
 
     Context 'Protecting PSCredentials' {
-        $protectedData = $credentialToEncrypt | Protect-Data -Password $passwordForEncryption
+        $protectedData = $credentialToEncrypt | Protect-Data -Password $passwordForEncryption -PasswordIterationCount $iterationCount
         $decrypted = $protectedData | Unprotect-Data -Password $passwordForEncryption
 
         It 'Does not return null' {
@@ -127,7 +134,7 @@ Describe 'Password-based encryption and decryption' {
     }
 
     Context 'Protecting Byte Arrays' {
-        $protectedData = Protect-Data -InputObject $byteArrayToEncrypt -Password $passwordForEncryption
+        $protectedData = Protect-Data -InputObject $byteArrayToEncrypt -Password $passwordForEncryption -PasswordIterationCount $iterationCount
         $decrypted = Unprotect-Data -InputObject $protectedData -Password $passwordForEncryption
 
         It 'Does not return null' {
