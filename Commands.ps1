@@ -169,7 +169,7 @@ function Protect-Data
             $params = @{
                 InputObject = $protectedData
                 Key = $payload.Key
-                IV = $payload.IV
+                InitializationVector = $payload.IV
                 Certificate = $certs
                 Password = $Password
                 PasswordIterationCount = $PasswordIterationCount
@@ -369,7 +369,7 @@ function Unprotect-Data
 
             $hmac = $InputObject.HMAC
 
-            $plainText = (Unprotect-DataWithAes -CipherText $InputObject.CipherText -Key $key -IV $iv -HMAC $hmac).PlainText
+            $plainText = (Unprotect-DataWithAes -CipherText $InputObject.CipherText -Key $key -InitializationVector $iv -HMAC $hmac).PlainText
 
             ConvertFrom-ByteArray -ByteArray $plainText -Type $InputObject.Type -ByteCount $plainText.Count
         }
@@ -716,7 +716,7 @@ function Add-ProtectedDataCredential
             $key = $result.Key
             $iv = $result.IV
 
-            Add-KeyData -InputObject $InputObject -Key $key -IV $iv -Certificate $certs -Password $NewPassword -PasswordIterationCount $PasswordIterationCount -UseLegacyPadding:$UseLegacyPadding
+            Add-KeyData -InputObject $InputObject -Key $key -InitializationVector $iv -Certificate $certs -Password $NewPassword -PasswordIterationCount $PasswordIterationCount -UseLegacyPadding:$UseLegacyPadding
         }
         catch
         {
@@ -1067,7 +1067,7 @@ function Protect-DataWithAes
         $Key,
 
         [byte[]]
-        $IV,
+        $InitializationVector,
 
         [switch]
         $NoHMAC
@@ -1082,7 +1082,7 @@ function Protect-DataWithAes
         $aes = New-Object System.Security.Cryptography.AesCryptoServiceProvider
 
         if ($null -ne $Key) { $aes.Key = $Key }
-        if ($null -ne $IV) { $aes.IV = $IV }
+        if ($null -ne $InitializationVector) { $aes.IV = $InitializationVector }
 
         $memoryStream = New-Object System.IO.MemoryStream
         $cryptoStream = New-Object System.Security.Cryptography.CryptoStream(
@@ -1107,7 +1107,7 @@ function Protect-DataWithAes
             $hmacKeySplat['Key'] = $properties['Key']
         }
 
-        if ($null -eq $IV)
+        if ($null -eq $InitializationVector)
         {
             $properties['IV'] = New-Object PowerShellUtils.PinnedArray[byte](,$aes.IV)
         }
@@ -1168,7 +1168,7 @@ function Unprotect-DataWithAes
 
         [Parameter(Mandatory = $true)]
         [byte[]]
-        $IV,
+        $InitializationVector,
 
         [byte[]]
         $HMAC
@@ -1188,7 +1188,7 @@ function Unprotect-DataWithAes
     {
         $aes = New-Object System.Security.Cryptography.AesCryptoServiceProvider -Property @{
             Key = $Key
-            IV = $IV
+            IV = $InitializationVector
         }
 
         # Not sure exactly how long of a buffer we'll need to hold the decrypted data. Twice
@@ -1270,7 +1270,7 @@ function Add-KeyData
 
         [Parameter(Mandatory = $true)]
         [byte[]]
-        $IV,
+        $InitializationVector,
 
         [ValidateNotNull()]
         [AllowEmptyCollection()]
@@ -1304,7 +1304,7 @@ function Add-KeyData
                      Where-Object { $_.Thumbprint -eq $cert.Thumbprint }
 
             if ($null -ne $match) { continue }
-            Protect-KeyDataWithCertificate -Certificate $cert -Key $Key -IV $IV -UseLegacyPadding:$UseLegacyPadding
+            Protect-KeyDataWithCertificate -Certificate $cert -Key $Key -InitializationVector $InitializationVector -UseLegacyPadding:$UseLegacyPadding
         }
 
         foreach ($secureString in $Password)
@@ -1321,7 +1321,7 @@ function Add-KeyData
                      }
 
             if ($null -ne $match) { continue }
-            Protect-KeyDataWithPassword -Password $secureString -Key $Key -IV $IV -IterationCount $PasswordIterationCount
+            Protect-KeyDataWithPassword -Password $secureString -Key $Key -InitializationVector $InitializationVector -IterationCount $PasswordIterationCount
         }
     )
 
@@ -1598,18 +1598,18 @@ function Protect-KeyDataWithCertificate
         $Key,
 
         [byte[]]
-        $IV,
+        $InitializationVector,
 
         [switch] $UseLegacyPadding
     )
 
     if ($Certificate.PublicKey.Key -is [System.Security.Cryptography.RSACryptoServiceProvider])
     {
-        Protect-KeyDataWithRsaCertificate -Certificate $Certificate -Key $Key -IV $IV -UseLegacyPadding:$UseLegacyPadding
+        Protect-KeyDataWithRsaCertificate -Certificate $Certificate -Key $Key -InitializationVector $InitializationVector -UseLegacyPadding:$UseLegacyPadding
     }
     elseif ($Certificate.GetKeyAlgorithm() -eq $script:EccAlgorithmOid)
     {
-        Protect-KeyDataWithEcdhCertificate -Certificate $Certificate -Key $Key -IV $IV
+        Protect-KeyDataWithEcdhCertificate -Certificate $Certificate -Key $Key -InitializationVector $InitializationVector
     }
 }
 
@@ -1625,7 +1625,7 @@ function Protect-KeyDataWithRsaCertificate
         $Key,
 
         [byte[]]
-        $IV,
+        $InitializationVector,
 
         [switch] $UseLegacyPadding
     )
@@ -1636,7 +1636,7 @@ function Protect-KeyDataWithRsaCertificate
     {
         New-Object psobject -Property @{
             Key = $Certificate.PublicKey.Key.Encrypt($key, $useOAEP)
-            IV = $Certificate.PublicKey.Key.Encrypt($iv, $useOAEP)
+            IV = $Certificate.PublicKey.Key.Encrypt($InitializationVector, $useOAEP)
             Thumbprint = $Certificate.Thumbprint
             LegacyPadding = [bool] $UseLegacyPadding
         }
@@ -1659,7 +1659,7 @@ function Protect-KeyDataWithEcdhCertificate
         $Key,
 
         [byte[]]
-        $IV
+        $InitializationVector
     )
 
     $publicKey = $null
@@ -1686,8 +1686,8 @@ function Protect-KeyDataWithEcdhCertificate
 
         $ecdhIv = Get-RandomBytes -Count 16
 
-        $encryptedKey = Protect-DataWithAes -PlainText $Key -Key $derivedKey -IV $ecdhIv -NoHMAC
-        $encryptedIv  = Protect-DataWithAes -PlainText $IV -Key $derivedKey -IV $ecdhIv -NoHMAC
+        $encryptedKey = Protect-DataWithAes -PlainText $Key -Key $derivedKey -InitializationVector $ecdhIv -NoHMAC
+        $encryptedIv  = Protect-DataWithAes -PlainText $InitializationVector -Key $derivedKey -InitializationVector $ecdhIv -NoHMAC
 
         New-Object psobject -Property @{
             Key = $encryptedKey.CipherText
@@ -1832,8 +1832,8 @@ function Unprotect-KeyDataWithEcdhCertificate
             throw "Error:  Key material derived from ECDH certificate $($Certificate.Thumbprint) was less than the required 32 bytes"
         }
 
-        $key = (Unprotect-DataWithAes -CipherText $KeyData.Key -Key $derivedKey -IV $KeyData.EcdhIV).PlainText
-        $iv = (Unprotect-DataWithAes -CipherText $KeyData.IV -Key $derivedKey -IV $KeyData.EcdhIV).PlainText
+        $key = (Unprotect-DataWithAes -CipherText $KeyData.Key -Key $derivedKey -InitializationVector $KeyData.EcdhIV).PlainText
+        $iv = (Unprotect-DataWithAes -CipherText $KeyData.IV -Key $derivedKey -InitializationVector $KeyData.EcdhIV).PlainText
 
         $doFinallyBlock = $false
 
@@ -1961,7 +1961,7 @@ function Protect-KeyDataWithPassword
 
         [Parameter(Mandatory = $true)]
         [byte[]]
-        $IV,
+        $InitializationVector,
 
         [ValidateRange(1,2147483647)]
         [int]
@@ -1981,8 +1981,8 @@ function Protect-KeyDataWithPassword
         $hashSalt = Get-RandomBytes -Count 32
         $hash = Get-PasswordHash -Password $Password -Salt $hashSalt -IterationCount $IterationCount
 
-        $encryptedKey = (Protect-DataWithAes -PlainText $Key -Key $ephemeralKey -IV $ephemeralIV -NoHMAC).CipherText
-        $encryptedIV = (Protect-DataWithAes -PlainText $IV -Key $ephemeralKey -IV $ephemeralIV -NoHMAC).CipherText
+        $encryptedKey = (Protect-DataWithAes -PlainText $Key -Key $ephemeralKey -InitializationVector $ephemeralIV -NoHMAC).CipherText
+        $encryptedIV = (Protect-DataWithAes -PlainText $InitializationVector -Key $ephemeralKey -InitializationVector $ephemeralIV -NoHMAC).CipherText
 
         New-Object psobject -Property @{
             Key = $encryptedKey
@@ -2038,8 +2038,8 @@ function Unprotect-KeyDataWithPassword
         $ephemeralKey = New-Object PowerShellUtils.PinnedArray[byte](,$keyGen.GetBytes(32))
         $ephemeralIV = New-Object PowerShellUtils.PinnedArray[byte](,$keyGen.GetBytes(16))
 
-        $key = (Unprotect-DataWithAes -CipherText $KeyData.Key -Key $ephemeralKey -IV $ephemeralIV).PlainText
-        $iv = (Unprotect-DataWithAes -CipherText $KeyData.IV -Key $ephemeralKey -IV $ephemeralIV).PlainText
+        $key = (Unprotect-DataWithAes -CipherText $KeyData.Key -Key $ephemeralKey -InitializationVector $ephemeralIV).PlainText
+        $iv = (Unprotect-DataWithAes -CipherText $KeyData.IV -Key $ephemeralKey -InitializationVector $ephemeralIV).PlainText
 
         $doFinallyBlock = $false
 
