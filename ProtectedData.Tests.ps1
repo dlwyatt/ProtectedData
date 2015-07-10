@@ -311,10 +311,10 @@ Describe 'Certificate-Based encryption and decryption (By certificate object)' {
 Describe 'Certificate-based encryption / decryption (by file system path)' {
     $certFromFile = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$scriptRoot\TestCertificateFile.pfx", 'password')
 
-    $hash = @{}
+    $hash = @{ ProtectedData = $null }
 
     It 'Encrypts data successfully with a relative filesystem path to a certificate file' {
-        [System.Environment]::CurrentDirectory = $HOME
+        [System.Environment]::CurrentDirectory = $env:temp
         Push-Location $scriptRoot
 
         try
