@@ -1,3 +1,5 @@
+__Build Status:__ [![Build status](https://build.powershell.org/guestAuth/app/rest/builds/buildType:(id:ProtectedData_PublishStatusToGitHub)/statusIcon)](https://build.powershell.org/project.html?projectId=ProtectedData&tab=projectOverview&guest=1)
+
 ProtectedData
 =============
 
