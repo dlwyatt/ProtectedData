@@ -8,7 +8,6 @@ Add-Type -TypeDefinition @'
         {
             private readonly T[] array;
             private readonly GCHandle gcHandle;
-            public readonly bool ClearOnDispose = true;
 
             private bool isDisposed = false;
 
@@ -61,22 +60,12 @@ Add-Type -TypeDefinition @'
                 gcHandle = GCHandle.Alloc(Array, GCHandleType.Pinned);
             }
 
-            public PinnedArray(uint count, bool clearOnDispose) : this(count)
-            {
-                ClearOnDispose = clearOnDispose;
-            }
-
             public PinnedArray(T[] array)
             {
                 if (array == null) { throw new ArgumentNullException("array"); }
 
                 this.array = array;
                 gcHandle = GCHandle.Alloc(this.array, GCHandleType.Pinned);
-            }
-
-            public PinnedArray(T[] array, bool clearOnDispose) : this(array)
-            {
-                ClearOnDispose = clearOnDispose;
             }
 
             ~PinnedArray()
@@ -88,7 +77,7 @@ Add-Type -TypeDefinition @'
             {
                 if (isDisposed) { return; }
 
-                if (array != null && ClearOnDispose) { System.Array.Clear(array, 0, array.Length); }
+                if (array != null) { System.Array.Clear(array, 0, array.Length); }
                 if (gcHandle != null) { gcHandle.Free(); }
 
                 isDisposed = true;
