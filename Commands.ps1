@@ -1925,7 +1925,7 @@ function DecryptRsaData([System.Security.Cryptography.X509Certificates.X509Certi
     {
         $cngKey = [Security.Cryptography.X509Certificates.X509Certificate2ExtensionMethods]::GetCngPrivateKey($Certificate)
         $cngRsa = [Security.Cryptography.RSACng]$cngKey
-        $cngRsa.EncryptionHashAlgorithm = [System.Security.Cryptography.CngAlgorithm]::Sha1
+        #$cngRsa.EncryptionHashAlgorithm = [System.Security.Cryptography.CngAlgorithm]::Sha1
 
         if (-not $UseOaepPadding)
         {

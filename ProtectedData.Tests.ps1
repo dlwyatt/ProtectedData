@@ -1,4 +1,4 @@
-Import-Module Pester -ErrorAction Stop
+Import-Module Pester -RequiredVersion 4.10.1 -ErrorAction Stop
 
 Set-StrictMode -Version Latest
 
