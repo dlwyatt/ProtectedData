@@ -1925,16 +1925,19 @@ function DecryptRsaData([System.Security.Cryptography.X509Certificates.X509Certi
     {
         $cngKey = [Security.Cryptography.X509Certificates.X509Certificate2ExtensionMethods]::GetCngPrivateKey($Certificate)
         $cngRsa = [Security.Cryptography.RSACng]$cngKey
-        #$cngRsa.EncryptionHashAlgorithm = [System.Security.Cryptography.CngAlgorithm]::Sha1
 
         if (-not $UseOaepPadding)
         {
-            $cngRsa.EncryptionPaddingMode = [Security.Cryptography.AsymmetricPaddingMode]::Pkcs1
+            return New-Object PowerShellUtils.PinnedArray[byte](
+                ,$cngRsa.Decrypt($CipherText, [System.Security.Cryptography.RSAEncryptionPadding]::Pkcs1)
+            )
         }
-
-        return New-Object PowerShellUtils.PinnedArray[byte](
-            ,$cngRsa.DecryptValue($CipherText)
-        )
+        else
+        {
+            return New-Object PowerShellUtils.PinnedArray[byte](
+                ,$cngRsa.Decrypt($CipherText, [System.Security.Cryptography.RSAEncryptionPadding]::OaepSHA1)
+            )
+        }
     }
     catch
     {
