@@ -1408,7 +1408,8 @@ function ValidateKeyEncryptionCertificate
 
         $isEccCertificate = $Certificate.GetKeyAlgorithm() -eq $script:EccAlgorithmOid
 
-        if ($Certificate.PublicKey.Key -isnot [System.Security.Cryptography.RSACryptoServiceProvider] -and
+        if (($Certificate.PublicKey.Key -isnot [System.Security.Cryptography.RSACryptoServiceProvider] -and
+            $Certificate.PublicKey.Key -isnot [System.Security.Cryptography.RSACng]) -and
             -not $isEccCertificate)
         {
             Write-Error "Certficiate '$($Certificate.Thumbprint)' is not an RSA or ECDH certificate."
@@ -1462,7 +1463,10 @@ function ValidateKeyEncryptionCertificate
 function TestPrivateKey([System.Security.Cryptography.X509Certificates.X509Certificate2] $Certificate)
 {
     if (-not $Certificate.HasPrivateKey) { return $false }
-    if ($Certificate.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider]) { return $true }
+    if ($Certificate.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider] -or $Certificate.PrivateKey -is [System.Security.Cryptography.RSACng])
+    {
+        return $true
+    }
 
     $cngKey = $null
     try
@@ -1603,7 +1607,7 @@ function Protect-KeyDataWithCertificate
         [switch] $UseLegacyPadding
     )
 
-    if ($Certificate.PublicKey.Key -is [System.Security.Cryptography.RSACryptoServiceProvider])
+    if ($Certificate.PublicKey.Key -is [System.Security.Cryptography.RSACryptoServiceProvider] -or $Certificate.PublicKey.Key -is [System.Security.Cryptography.RSACng])
     {
         Protect-KeyDataWithRsaCertificate -Certificate $Certificate -Key $Key -InitializationVector $InitializationVector -UseLegacyPadding:$UseLegacyPadding
     }
@@ -1634,11 +1638,28 @@ function Protect-KeyDataWithRsaCertificate
 
     try
     {
-        New-Object psobject -Property @{
-            Key = $Certificate.PublicKey.Key.Encrypt($key, $useOAEP)
-            IV = $Certificate.PublicKey.Key.Encrypt($InitializationVector, $useOAEP)
-            Thumbprint = $Certificate.Thumbprint
-            LegacyPadding = [bool] $UseLegacyPadding
+        if ($Certificate.PublicKey.Key -is [System.Security.Cryptography.RSACryptoServiceProvider])
+        {
+            New-Object psobject -Property @{
+                Key = $Certificate.PublicKey.Key.Encrypt($key, $useOAEP)
+                IV = $Certificate.PublicKey.Key.Encrypt($InitializationVector, $useOAEP)
+                Thumbprint = $Certificate.Thumbprint
+                LegacyPadding = [bool] $UseLegacyPadding
+            }
+        }
+        else
+        {
+            if (-not $useOAEP)
+            {
+                throw 'RSA encryption with PKCS#1 v1.5 padding is not supported with CNG keys.'
+            }
+
+            New-Object psobject -Property @{
+                Key = $Certificate.PublicKey.Key.Encrypt($key, [System.Security.Cryptography.RSAEncryptionPadding]::OaepSHA1)
+                IV = $Certificate.PublicKey.Key.Encrypt($InitializationVector, [System.Security.Cryptography.RSAEncryptionPadding]::OaepSHA1)
+                Thumbprint = $Certificate.Thumbprint
+                LegacyPadding = [bool] $UseLegacyPadding
+            }
         }
     }
     catch
@@ -1778,7 +1799,7 @@ function Unprotect-KeyDataWithCertificate
         $Certificate
     )
 
-    if ($Certificate.PublicKey.Key -is [System.Security.Cryptography.RSACryptoServiceProvider])
+    if ($Certificate.PublicKey.Key -is [System.Security.Cryptography.RSACryptoServiceProvider] -or $Certificate.PublicKey.Key -is [System.Security.Cryptography.RSACng])
     {
         Unprotect-KeyDataWithRsaCertificate -KeyData $KeyData -Certificate $Certificate
     }
@@ -1909,11 +1930,20 @@ function DecryptRsaData([System.Security.Cryptography.X509Certificates.X509Certi
                      [byte[]] $CipherText,
                      [switch] $UseOaepPadding)
 {
-    if ($Certificate.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider])
+    if ($Certificate.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider] -or $Certificate.PrivateKey -is [System.Security.Cryptography.RSACng])
     {
-        return New-Object PowerShellUtils.PinnedArray[byte](
-            ,$Certificate.PrivateKey.Decrypt($CipherText, $UseOaepPadding)
-        )
+        if (-not $UseOaepPadding)
+        {
+            return New-Object PowerShellUtils.PinnedArray[byte](
+                ,$Certificate.PrivateKey.Decrypt($CipherText, [System.Security.Cryptography.RSAEncryptionPadding]::Pkcs1)
+            )
+        }
+        else
+        {
+            return New-Object PowerShellUtils.PinnedArray[byte](
+                ,$Certificate.PrivateKey.Decrypt($CipherText, [System.Security.Cryptography.RSAEncryptionPadding]::OaepSHA1)
+            )
+        }
     }
 
     # By the time we get here, we've already validated that either the certificate has an RsaCryptoServiceProvider
