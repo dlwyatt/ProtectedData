@@ -434,13 +434,13 @@ Describe 'Legacy Padding Support' {
     }
 
     Context 'Using legacy padding' {
-        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile -UseLegacyPadding -ErrorAction SilentlyContinue
+        $protectedData = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile -UseLegacyPadding
 
-        It 'Assigns the use legacy padding property' -Skip:($PSVersionTable.PSEdition -eq 'Core') {
+        It 'Assigns the use legacy padding property' {
             $protectedData.KeyData[0].LegacyPadding | Should Be $true
         }
 
-        It 'Decrypts data properly' -Skip:($PSVersionTable.PSEdition -eq 'Core') {
+        It 'Decrypts data properly' {
             $protectedData |
             Unprotect-Data -Certificate $certFromFile |
             Should Be $stringToEncrypt
@@ -474,9 +474,9 @@ Describe 'RSA Certificates (CNG Key Storage Provider)' {
             Should Be $stringToEncrypt
         }
 
-        $protectedWithLegacyPadding = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -UseLegacyPadding -ErrorAction SilentlyContinue
+        $protectedWithLegacyPadding = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -UseLegacyPadding
 
-        It 'Decrypts data successfully with legacy padding' -Skip:($PSVersionTable.PSEdition -eq 'Core') {
+        It 'Decrypts data successfully with legacy padding'  {
             Unprotect-Data -InputObject $protectedWithLegacyPadding -Certificate $testCert |
             Should Be $stringToEncrypt
         }
