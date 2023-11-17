@@ -3,7 +3,8 @@ TOPIC
 
 SHORT DESCRIPTION
     Provides background information about the ProtectedData module.
-    
+
+LONG DESCRIPTION
   About ProtectedData
       When you need to store secret data, such as a set of credentials, in a
       PowerShell script, you would typically use the Export-Clixml or
@@ -24,7 +25,7 @@ SHORT DESCRIPTION
       and Unprotect-CmsMessage which accomplish a very similar task.  The ProtectedData
       module is compatible all the way back to PowerShell 2.0, though, and has some
       features that the CmsMessage cmdlets do not.
-    
+
   How It Works
       When you send a piece of data to the Protect-Data command, it is encrypted
       using a randomly-generated AES key and initialization vector (IV).  Copies
@@ -70,7 +71,7 @@ SHORT DESCRIPTION
       a Type property.  When you pass the object to Unprotect-Data, it uses this information
       to build and return an object of the original type for you (PSCredential, SecureString,
       String or Byte[] .)
-  
+
   Regarding In-Memory Security
       The commands in the ProtectedData module make an effort to minimize the amount
       of time that any sensitive, unencrypted data is left in memory as well, but
