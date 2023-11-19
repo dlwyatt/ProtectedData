@@ -9,7 +9,7 @@
 BuiltModuleSubdirectory: module
 CopyPaths:
   - en-US
-#  - DSCResources
+  - Lib
 # - Modules
 Encoding: UTF8
 # Can be used to manually specify module's semantic version if the preferred method of
