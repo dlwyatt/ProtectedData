@@ -1,5 +1,6 @@
 ModuleTests:
   ExcludeFunction:
+    #Private Functions
     - Add-KeyData
     - Assert-ValidHmac
     - Convert-ByteArrayToPSCredential
@@ -13,6 +14,7 @@ ModuleTests:
     - ConvertTo-X509Certificate2
     - Get-AlgorithmOid
     - Get-CertificateByThumbprint
+    - Get-CertificateFromPSPath
     - Get-DecodedBinaryOid
     - Get-EcdhPublicKey
     - Get-Hmac
@@ -39,3 +41,12 @@ ModuleTests:
     - Unprotect-KeyDataWithRsaCertificate
     - Unprotect-MatchingKeyData
     - Unprotect-RsaData
+
+    #Public Functions
+    - Add-ProtectedDataCredential
+    - Add-ProtectedDataHmac
+    - Get-KeyEncryptionCertificate
+    - Get-ProtectedDataSupportedTypes
+    - Protect-Data
+    - Remove-ProtectedDataCredential
+    - Unprotect-Data
