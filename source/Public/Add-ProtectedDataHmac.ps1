@@ -55,7 +55,7 @@ function Add-ProtectedDataHmac
 
                 if ($null -eq $type -or $script:ValidTypes -notcontains $type)
                 {
-                    throw 'Protected data object specified an invalid type. Type must be one of: ' ($script:ValidTypes -join ', ')
+                    throw "Protected data object specified an invalid type. Type must be one of: $($script:ValidTypes -join ', ')"
                 }
 
                 return $true
