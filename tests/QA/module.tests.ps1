@@ -1,5 +1,6 @@
 BeforeDiscovery {
     $projectPath = "$($PSScriptRoot)\..\.." | Convert-Path
+    $config = Get-Content $PSScriptRoot\module.tests.config.yml | ConvertFrom-Yaml
 
     <#
         If the QA tests are run outside of the build script (e.g with Invoke-Pester)
@@ -52,6 +53,8 @@ BeforeAll {
                 )
             }
     ).Directory.FullName
+
+
 }
 
 Describe 'Changelog Management' -Tag 'Changelog' {
@@ -86,7 +89,7 @@ BeforeDiscovery {
     # Build test cases.
     $testCases = @()
 
-    foreach ($function in $allModuleFunctions)
+    foreach ($function in ($allModuleFunctions | Where-Object { $_ -notin $config.ModuleTests.ExcludeFunction } ))
     {
         $testCases += @{
             Name = $function.Name
@@ -213,4 +216,3 @@ Describe 'Help for module' -Tags 'helpQuality' {
         }
     }
 }
-
