@@ -27,6 +27,8 @@ VersionedOutputDirectory: true
 #      ModuleBuilder Submodules Configuration      #
 ####################################################
 
+Prefix: Prefix.ps1
+
 NestedModule:
 #  HelperSubmodule: # This is the first submodule to build into the output
 #    Path: ./*/Modules/HelperSubmodule/HelperSubmodule.psd1

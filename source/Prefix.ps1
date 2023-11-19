@@ -17,6 +17,3 @@ $here = $PSScriptRoot
 [void][Security.Cryptography.RSACng].Module
 
 Add-Type -Path $here\Lib\Security.Cryptography.dll -ErrorAction Stop
-
-. $here\Classes\PinnedArray.ps1
-. $path\Classes\HMAC.ps1
