@@ -9,9 +9,9 @@ function ConvertFrom-ByteArray
 
         [Parameter(Mandatory = $true)]
         [ValidateScript({
-                if ($script:ValidTypes -notcontains $_)
+                if ((Get-ProtectedDataSupportedTypes) -notcontains $_)
                 {
-                    throw "Invalid type specified. Type must be one of: $($script:ValidTypes -join ', ')"
+                    throw "Invalid type specified. Type must be one of: $((Get-ProtectedDataSupportedTypes) -join ', ')"
                 }
 
                 return $true

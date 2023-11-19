@@ -51,9 +51,9 @@ function Unprotect-Data
 
                 $type = $_.Type -as [type]
 
-                if ($null -eq $type -or $script:ValidTypes -notcontains $type)
+                if ($null -eq $type -or (Get-ProtectedDataSupportedTypes) -notcontains $type)
                 {
-                    throw "Protected data object specified an invalid type. Type must be one of: $($script:ValidTypes -join ', ')"
+                    throw "Protected data object specified an invalid type. Type must be one of: $((Get-ProtectedDataSupportedTypes) -join ', ')"
                 }
 
                 return $true

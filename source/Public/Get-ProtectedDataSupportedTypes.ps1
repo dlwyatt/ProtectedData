@@ -1,6 +1,6 @@
 function Get-ProtectedDataSupportedTypes
 {
-    <#
+   <#
     .Synopsis
        Returns a list of types that can be used as the InputObject in the Protect-Data command.
     .EXAMPLE
@@ -17,17 +17,14 @@ function Get-ProtectedDataSupportedTypes
        Unprotect-Data
     #>
 
-    [CmdletBinding()]
-    [OutputType([Type[]])]
-    param ( )
+   [CmdletBinding()]
+   [OutputType([Type[]])]
+   param ( )
 
-    #TODO: Can be removed?
-    $script:ValidTypes = @(
-        [string]
-        [System.Security.SecureString]
-        [System.Management.Automation.PSCredential]
-        [byte[]]
-    )
 
-    $script:ValidTypes
+   [string],
+   [System.Security.SecureString],
+   [System.Management.Automation.PSCredential],
+   [byte[]]
+
 }

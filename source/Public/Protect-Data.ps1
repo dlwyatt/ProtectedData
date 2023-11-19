@@ -54,9 +54,9 @@ function Protect-Data
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline = $true, Position = 0)]
         [ValidateScript({
-                if ($script:ValidTypes -notcontains $_.GetType() -and $null -eq ($_ -as [byte[]]))
+                if ((Get-ProtectedDataSupportedTypes) -notcontains $_.GetType() -and $null -eq ($_ -as [byte[]]))
                 {
-                    throw "InputObject must be one of the following types: $($script:ValidTypes -join ', ')"
+                    throw "InputObject must be one of the following types: $((Get-ProtectedDataSupportedTypes) -join ', ')"
                 }
 
                 if ($_ -is [System.Security.SecureString] -and $_.Length -eq 0)
