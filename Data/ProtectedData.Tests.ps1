@@ -183,7 +183,7 @@ Describe 'Certificate-based encryption and decryption (By thumbprint)' {
         $protected = Protect-Data -InputObject $stringToEncrypt -Certificate $certThumbprint
 
         It 'Decrypts data successfully' {
-            Unprotect-Data -InputObject $protected -Certificate $certThumbprint -ErrorAction Stop | Should Be $stringToEncrypt
+            Unprotect-Data -InputObject $protected -Certificate $certThumbprint -ErrorAction Stop | Should -Be $stringToEncrypt
         }
     }
 
@@ -197,21 +197,21 @@ Describe 'Certificate-Based encryption and decryption (By certificate object)' {
 
     Context 'General Usage' {
         It 'Does not produce an error when a self-signed or otherwise invalid certificate is used.' {
-            { $null = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile -ErrorAction Stop } | Should Not Throw
+            { $null = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile -ErrorAction Stop } | Should -Not -Throw
         }
 
         $protected = Protect-Data -InputObject $stringToEncrypt -Certificate $certFromFile, $secondCertFromFile
 
         It 'Produces an error if a decryption attempt with the wrong certificate is made.' {
-            { $null = Unprotect-Data -InputObject $protected -Certificate $wrongCertFromFile -ErrorAction Stop } | Should Throw
+            { $null = Unprotect-Data -InputObject $protected -Certificate $wrongCertFromFile -ErrorAction Stop } | Should -Throw
         }
 
         It 'Allows any of the specified certificates to be used during decryption (First certificate test)' {
-            { $null = Unprotect-Data -InputObject $protected -Certificate $certFromFile -ErrorAction Stop } | Should Not Throw
+            { $null = Unprotect-Data -InputObject $protected -Certificate $certFromFile -ErrorAction Stop } | Should -Not -Throw
         }
 
         It 'Allows any of the specified certificates to be used during decryption (Second certificate test)' {
-            { $null = Unprotect-Data -InputObject $protected -Certificate $secondCertFromFile -ErrorAction Stop } | Should Not Throw
+            { $null = Unprotect-Data -InputObject $protected -Certificate $secondCertFromFile -ErrorAction Stop } | Should -Not -Throw
         }
 
         It 'Adds a new certificate to an existing object' {
@@ -471,14 +471,14 @@ Describe 'RSA Certificates (CNG Key Storage Provider)' {
 
         It 'Decrypts data successfully using an RSA cert using a CNG KSP' {
             Unprotect-Data -InputObject $protectedData -Certificate $testCert |
-            Should Be $stringToEncrypt
+            Should -Be $stringToEncrypt
         }
 
         $protectedWithLegacyPadding = Protect-Data -InputObject $stringToEncrypt -Certificate $testCert -UseLegacyPadding
 
         It 'Decrypts data successfully with legacy padding'  {
             Unprotect-Data -InputObject $protectedWithLegacyPadding -Certificate $testCert |
-            Should Be $stringToEncrypt
+            Should -Be $stringToEncrypt
         }
     }
 
@@ -494,7 +494,7 @@ Describe 'ECDH Certificates' {
 
         It 'Decrypts data successfully using an ECDH_P256 certificate' {
             Unprotect-Data -InputObject $protectedData -Certificate $testCert |
-            Should Be $stringToEncrypt
+            Should -Be $stringToEncrypt
         }
     }
 
@@ -506,7 +506,7 @@ Describe 'ECDH Certificates' {
 
         It 'Decrypts data successfully using an ECDH_P384 certificate' {
             Unprotect-Data -InputObject $protectedData -Certificate $testCert |
-            Should Be $stringToEncrypt
+            Should -Be $stringToEncrypt
         }
     }
 
@@ -518,7 +518,7 @@ Describe 'ECDH Certificates' {
 
         It 'Decrypts data successfully using an ECDH_P521 certificate' {
             Unprotect-Data -InputObject $protectedData -Certificate $testCert |
-            Should Be $stringToEncrypt
+            Should -Be $stringToEncrypt
         }
     }
 
