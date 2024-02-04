@@ -349,23 +349,12 @@ Describe 'Certificate-based encryption / decryption (by file system path)' {
     }
 
     It 'Encrypts data successfully with a relative filesystem path to a certificate file' {
-        [System.Environment]::CurrentDirectory = $env:temp
-        Push-Location $scriptRoot
-
-        try
-        {
-            { $hash.ProtectedData = Protect-Data $stringToEncrypt -Certificate "$testPath\Assets\TestCertificateFile.cer" -ErrorAction Stop } |
-                Should -Not -Throw
-        }
-        finally
-        {
-            Pop-Location
-        }
+        { $hash.ProtectedData = Protect-Data -InputObject $stringToEncrypt -Certificate "$testPath\Assets\TestCertificateFile.cer" -ErrorAction Stop } |
+            Should -Not -Throw
     }
 
     It 'Decrypts the data successfully' {
-        Unprotect-Data -InputObject $hash.ProtectedData -Certificate $certFromFile |
-            Should -Be $stringToEncrypt
+        Unprotect-Data -InputObject $hash.ProtectedData -Certificate $certFromFile | Should -Be $stringToEncrypt
     }
 }
 
