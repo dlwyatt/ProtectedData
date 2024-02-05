@@ -16,8 +16,7 @@ function Test-KeyEncryptionCertificate
 
         $isEccCertificate = $Certificate.GetKeyAlgorithm() -eq $script:EccAlgorithmOid
 
-        if (($Certificate.PublicKey.Key -isnot [System.Security.Cryptography.RSACryptoServiceProvider] -and
-                $Certificate.PublicKey.Key -isnot [System.Security.Cryptography.RSACng]) -and
+        if ($Certificate.PublicKey.Key -isnot [System.Security.Cryptography.RSA] -and
             -not $isEccCertificate)
         {
             Write-Error "Certficiate '$($Certificate.Thumbprint)' is not an RSA or ECDH certificate."

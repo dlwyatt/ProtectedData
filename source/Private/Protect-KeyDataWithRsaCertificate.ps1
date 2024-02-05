@@ -19,7 +19,7 @@ function Protect-KeyDataWithRsaCertificate
 
     try
     {
-        if ($Certificate.PublicKey.Key -is [System.Security.Cryptography.RSACryptoServiceProvider] -or $Certificate.PublicKey.Key -is [System.Security.Cryptography.RSACng])
+        if ($Certificate.PublicKey.Key -is [System.Security.Cryptography.RSA])
         {
             if ($PSVersionTable.PSEdition -eq 'Core')
             {

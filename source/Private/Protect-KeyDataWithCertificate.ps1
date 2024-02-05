@@ -16,12 +16,15 @@ function Protect-KeyDataWithCertificate
         [switch] $UseLegacyPadding
     )
 
-    if ($Certificate.PublicKey.Key -is [System.Security.Cryptography.RSACryptoServiceProvider] -or $Certificate.PublicKey.Key -is [System.Security.Cryptography.RSACng])
+    if ($Certificate.PublicKey.Key -is [System.Security.Cryptography.RSA])
     {
         Protect-KeyDataWithRsaCertificate -Certificate $Certificate -Key $Key -InitializationVector $InitializationVector -UseLegacyPadding:$UseLegacyPadding
     }
     elseif ($Certificate.GetKeyAlgorithm() -eq $script:EccAlgorithmOid)
     {
         Protect-KeyDataWithEcdhCertificate -Certificate $Certificate -Key $Key -InitializationVector $InitializationVector
+    }
+    else {
+        Write-Error "The certificate '$($Certificate.Thumbprint)' does not contain a supported public key algorithm."
     }
 }

@@ -109,7 +109,6 @@ function Protect-Data
             {
                 try
                 {
-
                     $x509Cert = ConvertTo-X509Certificate2 -InputObject $cert -ErrorAction Stop
                     Test-KeyEncryptionCertificate -CertificateGroup $x509Cert -ErrorAction Stop
                 }
@@ -154,7 +153,7 @@ function Protect-Data
                 UseLegacyPadding       = $UseLegacyPadding
             }
 
-            Add-KeyData @params
+            Add-KeyData @params -ErrorAction Stop
 
             if ($protectedData.KeyData.Count -eq 0)
             {
