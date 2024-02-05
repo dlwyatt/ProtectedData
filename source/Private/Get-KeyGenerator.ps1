@@ -12,6 +12,7 @@ function Get-KeyGenerator
         [byte[]]
         $Salt,
 
+        [Parameter()]
         [ValidateRange(1, 2147483647)]
         [int]
         $IterationCount = 50000

@@ -19,9 +19,11 @@ function ConvertFrom-ByteArray
         [type]
         $Type,
 
+        [Parameter()]
         [UInt32]
         $StartIndex = 0,
 
+        [Parameter()]
         [Nullable[UInt32]]
         $ByteCount = $null
     )

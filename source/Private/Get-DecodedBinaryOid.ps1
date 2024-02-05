@@ -1,5 +1,11 @@
-function Get-DecodedBinaryOid([byte[]] $Bytes)
+function Get-DecodedBinaryOid
 {
+    param (
+        [Parameter(Mandatory = $true)]
+        [byte[]]
+        $Bytes
+    )
+
     # Thanks to Vadims Podans (http://sysadmins.lv/) for this cool technique to take a byte array
     # and decode the OID without having to use P/Invoke to call the CryptDecodeObject function directly.
 

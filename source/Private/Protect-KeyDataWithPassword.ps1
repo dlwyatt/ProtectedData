@@ -14,6 +14,7 @@ function Protect-KeyDataWithPassword
         [byte[]]
         $InitializationVector,
 
+        [Parameter()]
         [ValidateRange(1, 2147483647)]
         [int]
         $IterationCount = 50000

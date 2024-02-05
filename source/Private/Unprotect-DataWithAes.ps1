@@ -14,6 +14,7 @@ function Unprotect-DataWithAes
         [byte[]]
         $InitializationVector,
 
+        [Parameter()]
         [byte[]]
         $HMAC
     )

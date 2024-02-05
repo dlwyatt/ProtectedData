@@ -68,6 +68,7 @@ function Unprotect-Data
         [System.Security.SecureString]
         $Password,
 
+        [Parameter()]
         [switch]
         $SkipCertificateVerification
     )

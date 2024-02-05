@@ -6,9 +6,11 @@ function Protect-KeyDataWithEcdhCertificate
         [System.Security.Cryptography.X509Certificates.X509Certificate2]
         $Certificate,
 
+        [Parameter()]
         [byte[]]
         $Key,
 
+        [Parameter()]
         [byte[]]
         $InitializationVector
     )
@@ -32,7 +34,7 @@ function Protect-KeyDataWithEcdhCertificate
         if ($derivedKey.Count -ne 32)
         {
             # This shouldn't happen, but just in case...
-            throw "Error:  Key material derived from ECDH certificate $($Certificate.Thumbprint) was less than the required 32 bytes"
+            throw "Error: Key material derived from ECDH certificate $($Certificate.Thumbprint) was less than the required 32 bytes"
         }
 
         $ecdhIv = Get-RandomBytes -Count 16

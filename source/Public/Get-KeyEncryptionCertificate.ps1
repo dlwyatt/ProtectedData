@@ -1,6 +1,6 @@
 function Get-KeyEncryptionCertificate
 {
-    <#
+   <#
     .Synopsis
        Finds certificates which can be used by Protect-Data and related commands.
     .DESCRIPTION
@@ -35,51 +35,55 @@ function Get-KeyEncryptionCertificate
        Remove-ProtectedDataCredential
     #>
 
-    [CmdletBinding()]
-    [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
-    param (
-        [ValidateNotNullOrEmpty()]
-        [string]
-        $Path = 'Cert:\',
+   [CmdletBinding()]
+   [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
+   param (
+      [Parameter()]
+      [ValidateNotNullOrEmpty()]
+      [string]
+      $Path = 'Cert:\',
 
-        [string]
-        $CertificateThumbprint = '*',
+      [Parameter()]
+      [string]
+      $CertificateThumbprint = '*',
 
-        [switch]
-        $SkipCertificateVerification,
+      [Parameter()]
+      [switch]
+      $SkipCertificateVerification,
 
-        [switch]
-        $RequirePrivateKey
-    )
+      [Parameter()]
+      [switch]
+      $RequirePrivateKey
+   )
 
-    if ($PSBoundParameters.ContainsKey('SkipCertificateVerification'))
-    {
-        Write-Warning 'The -SkipCertificateVerification switch has been deprecated, and the module now treats that as its default behavior.  This switch will be removed in a future release.'
-    }
+   if ($PSBoundParameters.ContainsKey('SkipCertificateVerification'))
+   {
+      Write-Warning 'The -SkipCertificateVerification switch has been deprecated, and the module now treats that as its default behavior.  This switch will be removed in a future release.'
+   }
 
-    # Suppress error output if we're doing a wildcard search (unless user specifically asks for it via -ErrorAction)
-    # This is a little ugly, may rework this later now that I've made Get-KeyEncryptionCertificate public. Originally
-    # it was only used to search for a single thumbprint, and threw errors back to the caller if no suitable cert could
-    # be found. Now I want it to also be used as a search tool for users to identify suitable certificates. Maybe just
-    # needs to be two separate functions, one internal and one public.
+   # Suppress error output if we're doing a wildcard search (unless user specifically asks for it via -ErrorAction)
+   # This is a little ugly, may rework this later now that I've made Get-KeyEncryptionCertificate public. Originally
+   # it was only used to search for a single thumbprint, and threw errors back to the caller if no suitable cert could
+   # be found. Now I want it to also be used as a search tool for users to identify suitable certificates. Maybe just
+   # needs to be two separate functions, one internal and one public.
 
-    if (-not $PSBoundParameters.ContainsKey('ErrorAction') -and
-        $CertificateThumbprint -notmatch '^[A-F\d]+$')
-    {
-        $ErrorActionPreference = $IgnoreError
-    }
+   if (-not $PSBoundParameters.ContainsKey('ErrorAction') -and
+      $CertificateThumbprint -notmatch '^[A-F\d]+$')
+   {
+      $ErrorActionPreference = $IgnoreError
+   }
 
-    $certGroups = Get-CertificateByThumbprint -Path $Path -Thumbprint $CertificateThumbprint -ErrorAction $IgnoreError |
-        Group-Object -Property Thumbprint
+   $certGroups = Get-CertificateByThumbprint -Path $Path -Thumbprint $CertificateThumbprint -ErrorAction $IgnoreError |
+      Group-Object -Property Thumbprint
 
-    if ($null -eq $certGroups)
-    {
-        throw "Certificate '$CertificateThumbprint' was not found."
-    }
+   if ($null -eq $certGroups)
+   {
+      throw "Certificate '$CertificateThumbprint' was not found."
+   }
 
-    foreach ($group in $certGroups)
-    {
-        Test-KeyEncryptionCertificate -CertificateGroup $group.Group -RequirePrivateKey:$RequirePrivateKey
-    }
+   foreach ($group in $certGroups)
+   {
+      Test-KeyEncryptionCertificate -CertificateGroup $group.Group -RequirePrivateKey:$RequirePrivateKey
+   }
 
 }

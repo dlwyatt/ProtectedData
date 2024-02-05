@@ -1,5 +1,11 @@
-function Get-EcdhPublicKey([System.Security.Cryptography.X509Certificates.X509Certificate2] $Certificate)
+function Get-EcdhPublicKey()
 {
+    param (
+        [Parameter(Mandatory = $true)]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]
+        $Certificate
+    )
+
     # If we get here, we've already verified that the certificate has the Key Agreement usage extension,
     # and that it is an ECC algorithm cert, meaning we can treat the OIDs as ECDH algorithms.  (These OIDs
     # are shared with ECDSA, for some reason, and the ECDSA magic constants are different.)

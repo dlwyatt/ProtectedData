@@ -38,12 +38,11 @@ function Unprotect-MatchingKeyData
     else
     {
         $keyData =
-        $InputObject.KeyData |
-            Where-Object {
+        $InputObject.KeyData | Where-Object {
             (Test-IsPasswordProtectedKeyData -InputObject $_) -and
-                $_.Hash -eq (Get-PasswordHash -Password $Password -Salt $_.HashSalt -IterationCount $_.IterationCount)
-            } |
-                Select-Object -First 1
+            $_.Hash -eq (Get-PasswordHash -Password $Password -Salt $_.HashSalt -IterationCount $_.IterationCount)
+        } |
+            Select-Object -First 1
 
         if ($null -eq $keyData)
         {

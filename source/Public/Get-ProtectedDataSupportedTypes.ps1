@@ -21,8 +21,7 @@ function Get-ProtectedDataSupportedTypes
    [OutputType([Type[]])]
    param ( )
 
-
-   [string],
+   return [string],
    [System.Security.SecureString],
    [System.Management.Automation.PSCredential],
    [byte[]]

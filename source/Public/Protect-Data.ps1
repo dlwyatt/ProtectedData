@@ -68,14 +68,17 @@ function Protect-Data
             })]
         $InputObject,
 
+        [Parameter()]
         [ValidateNotNullOrEmpty()]
         [AllowEmptyCollection()]
         [object[]]
         $Certificate = @(),
 
+        [Parameter()]
         [switch]
         $UseLegacyPadding,
 
+        [Parameter()]
         [ValidateNotNull()]
         [AllowEmptyCollection()]
         [ValidateScript({
@@ -89,10 +92,12 @@ function Protect-Data
         [System.Security.SecureString[]]
         $Password = @(),
 
+        [Parameter()]
         [ValidateRange(1, 2147483647)]
         [int]
         $PasswordIterationCount = 50000,
 
+        [Parameter()]
         [switch]
         $SkipCertificateVerification
     )

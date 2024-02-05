@@ -6,6 +6,7 @@ function Get-CertificateByThumbprint
         [Parameter(Mandatory = $true)]
         [string] $Thumbprint,
 
+        [Parameter()]
         [ValidateNotNullOrEmpty()]
         [string]
         $Path = 'Cert:\'

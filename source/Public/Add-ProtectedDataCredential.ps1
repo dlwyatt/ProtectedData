@@ -70,26 +70,32 @@ function Add-ProtectedDataCredential
         [System.Security.SecureString]
         $Password,
 
+        [Parameter()]
         [ValidateNotNull()]
         [AllowEmptyCollection()]
         [object[]]
         $NewCertificate = @(),
 
+        [Parameter()]
         [switch]
         $UseLegacyPadding,
 
+        [Parameter()]
         [ValidateNotNull()]
         [AllowEmptyCollection()]
         [System.Security.SecureString[]]
         $NewPassword = @(),
 
+        [Parameter()]
         [ValidateRange(1, 2147483647)]
         [int]
         $PasswordIterationCount = 50000,
 
+        [Parameter()]
         [switch]
         $SkipCertificateVerification,
 
+        [Parameter()]
         [switch]
         $Passthru
     )
@@ -149,11 +155,15 @@ function Add-ProtectedDataCredential
     {
         if ($null -ne $decryptionCert)
         {
-            $params = @{ Certificate = $decryptionCert }
+            $params = @{
+                Certificate = $decryptionCert
+            }
         }
         else
         {
-            $params = @{ Password = $Password }
+            $params = @{
+                Password = $Password
+            }
         }
 
         $key = $null

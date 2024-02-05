@@ -3,10 +3,12 @@ function Get-Hmac
     [OutputType([byte[]])]
     param (
         [Parameter(Mandatory = $true)]
-        [byte[]] $Key,
+        [byte[]]
+        $Key,
 
         [Parameter(Mandatory = $true)]
-        [byte[]] $Bytes
+        [byte[]]
+        $Bytes
     )
 
     $hmac = $null

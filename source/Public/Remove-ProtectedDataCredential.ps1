@@ -45,16 +45,19 @@ function Remove-ProtectedDataCredential
             })]
         $InputObject,
 
+        [Parameter()]
         [ValidateNotNull()]
         [AllowEmptyCollection()]
         [object[]]
         $Certificate,
 
+        [Parameter()]
         [ValidateNotNull()]
         [AllowEmptyCollection()]
         [System.Security.SecureString[]]
         $Password,
 
+        [Parameter()]
         [switch]
         $Passthru
     )

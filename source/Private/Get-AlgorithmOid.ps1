@@ -1,6 +1,12 @@
-function Get-AlgorithmOid([System.Security.Cryptography.X509Certificates.X509Certificate] $Certificate)
+function Get-AlgorithmOid
 {
-    $algorithmOid = $Certificate.GetKeyAlgorithm();
+    param (
+        [Parameter(Mandatory = $true)]
+        [System.Security.Cryptography.X509Certificates.X509Certificate]
+        $Certificate
+    )
+
+    $algorithmOid = $Certificate.GetKeyAlgorithm()
 
     if ($algorithmOid -eq $script:EccAlgorithmOid)
     {

@@ -1,9 +1,19 @@
-function Unprotect-RsaData(
-    [System.Security.Cryptography.X509Certificates.X509Certificate2] $Certificate,
-    [byte[]] $CipherText,
-    [switch] $UseOaepPadding)
+function Unprotect-RsaData
 {
-    if ($Certificate.PrivateKey -is [System.Security.Cryptography.RSACryptoServiceProvider] -or $Certificate.PrivateKey -is [System.Security.Cryptography.RSACng])
+    param (
+        [Parameter(Mandatory = $true)]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2] $Certificate,
+
+        [Parameter(Mandatory = $true)]
+        [byte[]]
+        $CipherText,
+
+        [Parameter()]
+        [switch]
+        $UseOaepPadding
+    )
+
+    if ($Certificate.PrivateKey -is [System.Security.Cryptography.RSA])
     {
         if (-not $UseOaepPadding)
         {

@@ -4,6 +4,7 @@ function ConvertTo-PinnedByteArray
     [OutputType([PowerShellUtils.PinnedArray[byte]])]
     param (
         [Parameter(Mandatory = $true)]
+        [object]
         $InputObject
     )
 

@@ -7,13 +7,17 @@ function Protect-KeyDataWithCertificate
         [System.Security.Cryptography.X509Certificates.X509Certificate2]
         $Certificate,
 
+        [Parameter()]
         [byte[]]
         $Key,
 
+        [Parameter()]
         [byte[]]
         $InitializationVector,
 
-        [switch] $UseLegacyPadding
+        [Parameter()]
+        [switch]
+        $UseLegacyPadding
     )
 
     if ($Certificate.PublicKey.Key -is [System.Security.Cryptography.RSA])
@@ -24,7 +28,8 @@ function Protect-KeyDataWithCertificate
     {
         Protect-KeyDataWithEcdhCertificate -Certificate $Certificate -Key $Key -InitializationVector $InitializationVector
     }
-    else {
+    else
+    {
         Write-Error "The certificate '$($Certificate.Thumbprint)' does not contain a supported public key algorithm."
     }
 }

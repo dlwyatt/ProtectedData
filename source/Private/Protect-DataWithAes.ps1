@@ -6,12 +6,15 @@ function Protect-DataWithAes
         [byte[]]
         $PlainText,
 
+        [Parameter()]
         [byte[]]
         $Key,
 
+        [Parameter()]
         [byte[]]
         $InitializationVector,
 
+        [Parameter()]
         [switch]
         $NoHMAC
     )

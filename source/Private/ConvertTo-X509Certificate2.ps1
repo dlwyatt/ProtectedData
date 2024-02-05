@@ -4,7 +4,8 @@ function ConvertTo-X509Certificate2
     [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
     param (
         [Parameter(ValueFromPipeline = $true)]
-        [object[]] $InputObject = @()
+        [object[]]
+        $InputObject = @()
     )
 
     process

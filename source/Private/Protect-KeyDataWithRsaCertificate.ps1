@@ -6,13 +6,17 @@ function Protect-KeyDataWithRsaCertificate
         [System.Security.Cryptography.X509Certificates.X509Certificate2]
         $Certificate,
 
+        [Parameter()]
         [byte[]]
         $Key,
 
+        [Parameter()]
         [byte[]]
         $InitializationVector,
 
-        [switch] $UseLegacyPadding
+        [Parameter()]
+        [switch]
+        $UseLegacyPadding
     )
 
     $useOAEP = -not $UseLegacyPadding

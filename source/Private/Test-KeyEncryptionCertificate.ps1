@@ -3,9 +3,11 @@ function Test-KeyEncryptionCertificate
     [CmdletBinding()]
     [OutputType([System.Security.Cryptography.X509Certificates.X509Certificate2])]
     param (
+        [Parameter(Mandatory = $true)]
         [System.Security.Cryptography.X509Certificates.X509Certificate2[]]
         $CertificateGroup,
 
+        [Parameter()]
         [switch]
         $RequirePrivateKey
     )

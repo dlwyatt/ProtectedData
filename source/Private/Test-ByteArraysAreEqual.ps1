@@ -1,5 +1,15 @@
-function Test-ByteArraysAreEqual([byte[]] $First, [byte[]] $Second)
+function Test-ByteArraysAreEqual
 {
+    param (
+        [Parameter(Mandatory = $true)]
+        [byte[]]
+        $First,
+
+        [Parameter(Mandatory = $true)]
+        [byte[]]
+        $Second
+    )
+
     if ($null -eq $First)
     {
         $First = @()
